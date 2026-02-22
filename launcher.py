@@ -21,7 +21,8 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QComboBox, QSpinBox, QLineEdit, QGroupBox,
     QTextEdit, QFormLayout, QMessageBox, QSystemTrayIcon, QMenu,
-    QFrame, QSplitter, QStackedWidget, QSpacerItem, QSizePolicy
+    QFrame, QSplitter, QStackedWidget, QSpacerItem, QSizePolicy,
+    QCheckBox,
 )
 
 import config  # our %appdata% config module
@@ -149,6 +150,62 @@ def _find_ssl_files() -> tuple[str | None, str | None]:
         if os.path.isfile(key) and os.path.isfile(cert):
             return key, cert
     return None, None
+
+
+# ---------------------------------------------------------------------------
+# Windows auto-start helpers (Startup folder shortcut)
+# ---------------------------------------------------------------------------
+_STARTUP_DIR = os.path.join(
+    os.environ.get("APPDATA", os.path.expanduser("~")),
+    "Microsoft", "Windows", "Start Menu", "Programs", "Startup",
+)
+_SHORTCUT_NAME = "BrowserRemote.lnk"
+
+
+def _shortcut_path() -> str:
+    return os.path.join(_STARTUP_DIR, _SHORTCUT_NAME)
+
+
+def _is_autostart_enabled() -> bool:
+    return os.path.isfile(_shortcut_path())
+
+
+def _set_autostart(enable: bool):
+    """Create or remove a .lnk shortcut in the Windows Startup folder."""
+    link = _shortcut_path()
+    if enable:
+        try:
+            import winreg  # noqa: F401 – just to confirm Windows
+            # Use PowerShell to create the shortcut (avoids pywin32 dependency)
+            if getattr(sys, 'frozen', False):
+                target = sys.executable  # the compiled .exe
+            else:
+                target = sys.executable  # python.exe
+            args_str = "" if getattr(sys, 'frozen', False) else f'"{os.path.abspath(__file__)}"'
+            work_dir = os.path.dirname(target)
+
+            ps_script = (
+                f'$ws = New-Object -ComObject WScript.Shell; '
+                f'$sc = $ws.CreateShortcut("{link}"); '
+                f'$sc.TargetPath = "{target}"; '
+                f'$sc.Arguments = "{args_str}"; '
+                f'$sc.WorkingDirectory = "{work_dir}"; '
+                f'$sc.Description = "Browser Remote"; '
+                f'$sc.Save()'
+            )
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_script],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                timeout=10,
+            )
+        except Exception as e:
+            print(f"Failed to create startup shortcut: {e}")
+    else:
+        try:
+            if os.path.isfile(link):
+                os.remove(link)
+        except Exception as e:
+            print(f"Failed to remove startup shortcut: {e}")
 
 
 def generate_qr_pixmap(data_str: str, size: int = 180) -> QPixmap:
@@ -384,6 +441,31 @@ class LauncherWindow(QMainWindow):
         self._populate_monitors()
         setup_card_layout.addWidget(make_field("Browser Display", self.monitor_combo))
 
+        # --- Options row ---
+        options_widget = QWidget()
+        options_layout = QHBoxLayout(options_widget)
+        options_layout.setContentsMargins(0, 4, 0, 0)
+        options_layout.setSpacing(20)
+
+        self.server_only_check = QCheckBox("Server only (don't launch browser)")
+        self.server_only_check.setStyleSheet("color: #cccccc; font-size: 12px;")
+        self.server_only_check.setToolTip(
+            "Start the server without opening the browser.\n"
+            "You can launch the browser later from your phone."
+        )
+        options_layout.addWidget(self.server_only_check)
+
+        self.autostart_check = QCheckBox("Start with Windows")
+        self.autostart_check.setStyleSheet("color: #cccccc; font-size: 12px;")
+        self.autostart_check.setToolTip(
+            "Automatically start the server when you log in to Windows."
+        )
+        self.autostart_check.toggled.connect(self._on_autostart_toggled)
+        options_layout.addWidget(self.autostart_check)
+
+        options_layout.addStretch()
+        setup_card_layout.addWidget(options_widget)
+
         setup_card_layout.addStretch()
 
         self.start_btn = QPushButton("Start Server")
@@ -555,6 +637,13 @@ class LauncherWindow(QMainWindow):
         path = self.browsers.get(name, "")
         self.browser_path_edit.setText(path)
 
+    def _on_autostart_toggled(self, checked):
+        _set_autostart(checked)
+        if checked:
+            self._log("Added to Windows Startup.", "#4ecca3")
+        else:
+            self._log("Removed from Windows Startup.", "#888")
+
     # ----- Settings persistence -----
     def _load_settings(self):
         # Load from QSettings (window state) and config.json (app config)
@@ -579,6 +668,9 @@ class LauncherWindow(QMainWindow):
         profile = self.settings.value("profile", 0, type=int)
         if 0 <= profile < self.profile_combo.count():
             self.profile_combo.setCurrentIndex(profile)
+
+        self.server_only_check.setChecked(cfg.get("no_browser", False))
+        self.autostart_check.setChecked(_is_autostart_enabled())
 
     def _save_settings(self):
         """Save to both QSettings (launcher prefs) and config.json (app config)."""
@@ -610,6 +702,7 @@ class LauncherWindow(QMainWindow):
             "projector_monitor": self.monitor_combo.currentData() or 0,
             "monitors": monitors_dict,
             "default_url": self.default_url_edit.text().strip() or "https://www.youtube.com/tv",
+            "no_browser": self.server_only_check.isChecked(),
         })
 
     def _show_first_launch(self):
@@ -653,6 +746,10 @@ class LauncherWindow(QMainWindow):
         else:
             self._log("No SSL certs found — starting in HTTP mode.", "#e9a045")
 
+        no_browser = self.server_only_check.isChecked()
+        if no_browser:
+            self._log("Server-only mode — browser will NOT be launched.", "#e9a045")
+
         if getattr(sys, 'frozen', False):
             # PyInstaller exe — re-launch ourselves with --server flag
             uvicorn_args = [
@@ -663,6 +760,8 @@ class LauncherWindow(QMainWindow):
             ]
             if has_ssl:
                 uvicorn_args += ["--ssl-keyfile", key_file, "--ssl-certfile", cert_file]
+            if no_browser:
+                uvicorn_args.append("--no-browser")
             self.server_proc.setWorkingDirectory(bd)
             self.server_proc.start(sys.executable, uvicorn_args)
         else:
@@ -780,7 +879,13 @@ def main():
         p.add_argument("--log-level", default="info")
         p.add_argument("--ssl-keyfile", default=None)
         p.add_argument("--ssl-certfile", default=None)
+        p.add_argument("--no-browser", action="store_true")
         args = p.parse_args()
+
+        # Tell the server module to skip browser launch
+        if args.no_browser:
+            os.environ["BR_NO_BROWSER"] = "1"
+
         import uvicorn
         uvicorn.run(
             "server:app",

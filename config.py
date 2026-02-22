@@ -24,6 +24,7 @@ _DEFAULTS = {
     "projector_monitor": 0,
     "monitors": {},
     "default_url": "https://www.youtube.com/tv",
+    "no_browser": False,
     "sites": {
         "youtube": "https://www.youtube.com/tv",
         "netflix": "https://www.netflix.com/browse",

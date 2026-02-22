@@ -277,19 +277,34 @@ def get_local_ip() -> str:
 async def lifespan(app: FastAPI):
     log.info("=== browser remote v4 starting ===")
 
-    # Try connecting to an existing browser
-    try:
-        await ensure_connection()
-        log.info("Connected to existing browser")
-    except Exception:
-        log.info("No browser found — launching from config...")
+    # Check if browser launch should be skipped
+    no_browser = (
+        os.environ.get("BR_NO_BROWSER", "") == "1"
+        or config.load().get("no_browser", False)
+    )
+
+    if no_browser:
+        log.info("Server-only mode — browser will NOT be launched automatically.")
+        # Still try connecting to an already-running browser
         try:
-            launch_browser()
-            await asyncio.sleep(3)
             await ensure_connection()
-            log.info("Browser launched and connected")
-        except Exception as e:
-            log.warning(f"Browser launch/connect failed: {e} — server in standby")
+            log.info("Connected to existing browser")
+        except Exception:
+            log.info("No browser running — waiting for remote launch via /api/start")
+    else:
+        # Try connecting to an existing browser
+        try:
+            await ensure_connection()
+            log.info("Connected to existing browser")
+        except Exception:
+            log.info("No browser found — launching from config...")
+            try:
+                launch_browser()
+                await asyncio.sleep(3)
+                await ensure_connection()
+                log.info("Browser launched and connected")
+            except Exception as e:
+                log.warning(f"Browser launch/connect failed: {e} — server in standby")
 
     local_ip = get_local_ip()
     log.info(f"  Local:   http://localhost:{config.PORT}")
