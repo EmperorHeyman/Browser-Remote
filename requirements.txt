@@ -1,0 +1,7 @@
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+playwright>=1.40.0
+PyQt6>=6.5.0
+qrcode>=7.0
+mss>=9.0.0
+Pillow>=10.0.0

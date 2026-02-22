@@ -1,0 +1,1682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>browser remote</title>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box; margin: 0; padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none; user-select: none;
+        }
+        :root {
+            --bg: #0a0a0a;
+            --surface: #161625;
+            --surface2: #1e1e35;
+            --primary: #e94560;
+            --accent: #0f3460;
+            --text: #eee;
+            --dim: #777;
+            --success: #4ecca3;
+            --danger: #e94560;
+            --radius: 12px;
+        }
+        html, body { height: 100%; overflow: hidden; touch-action: manipulation; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg); color: var(--text);
+            display: flex; flex-direction: column;
+        }
+
+        /* ===== TOP BAR ===== */
+        .topbar {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 12px; background: var(--surface);
+            border-bottom: 1px solid var(--surface2); flex-shrink: 0;
+            font-size: 12px;
+        }
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--danger); flex-shrink: 0;
+        }
+        .status-dot.on { background: var(--success); }
+        .topbar-title {
+            flex: 1; color: var(--dim); overflow: hidden;
+            white-space: nowrap; text-overflow: ellipsis;
+        }
+        .topbar-btn {
+            background: var(--accent); color: var(--text); border: none;
+            padding: 5px 10px; border-radius: 6px; font-size: 11px;
+            cursor: pointer; white-space: nowrap;
+        }
+
+        /* ===== MODE TABS ===== */
+        .mode-tabs {
+            display: flex; background: var(--surface); flex-shrink: 0;
+        }
+        .mode-tab {
+            flex: 1; padding: 9px; text-align: center; font-size: 13px;
+            font-weight: 600; color: var(--dim); background: none;
+            border: none; border-bottom: 2px solid transparent;
+            cursor: pointer; text-transform: uppercase; letter-spacing: .5px;
+        }
+        .mode-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        /* ===== PANELS ===== */
+        .panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+        .panel.active { display: flex; }
+
+        /* ===== MIRROR PANEL ===== */
+        .mirror-wrap {
+            flex: 1; position: relative; overflow: hidden;
+            background: #000; touch-action: none;
+        }
+        .mirror-canvas-container {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            transform-origin: center center;
+            will-change: transform;
+        }
+        .mirror-img {
+            max-width: 100%; max-height: 100%; object-fit: contain;
+            pointer-events: none;
+        }
+        .mirror-hint {
+            position: absolute; bottom: 8px; left: 50%;
+            transform: translateX(-50%); background: rgba(0,0,0,.7);
+            color: var(--dim); padding: 4px 12px; border-radius: 16px;
+            font-size: 11px; pointer-events: none;
+            transition: opacity .3s; z-index: 10;
+        }
+        .mirror-zoom-badge {
+            position: absolute; top: 8px; right: 8px;
+            background: rgba(0,0,0,.7); color: var(--primary);
+            padding: 3px 8px; border-radius: 8px;
+            font-size: 11px; font-weight: 600; pointer-events: none;
+            opacity: 0; transition: opacity .3s; z-index: 10;
+        }
+        .mirror-zoom-badge.visible { opacity: 1; }
+        .click-ripple {
+            position: absolute; width: 30px; height: 30px;
+            border: 2px solid var(--primary); border-radius: 50%;
+            pointer-events: none; transform: translate(-50%, -50%) scale(0);
+            animation: ripple .4s ease-out forwards; z-index: 10;
+        }
+        @keyframes ripple {
+            0% { transform: translate(-50%,-50%) scale(0); opacity: 1; }
+            100% { transform: translate(-50%,-50%) scale(2); opacity: 0; }
+        }
+        .mirror-controls {
+            display: flex; gap: 6px; padding: 6px 10px;
+            background: var(--surface); flex-shrink: 0;
+            flex-wrap: wrap; justify-content: center;
+        }
+        .mc-btn {
+            height: 38px; padding: 0 14px; background: var(--surface2);
+            border: 1px solid #333; color: var(--text); border-radius: 8px;
+            font-size: 12px; cursor: pointer; display: flex;
+            align-items: center; gap: 4px; font-weight: 500;
+        }
+        .mc-btn:active { background: var(--accent); }
+
+        /* ===== REMOTE PANEL ===== */
+        .remote-panel {
+            flex: 1; display: flex; flex-direction: column; overflow: hidden;
+        }
+        .remote-submode-bar {
+            display: flex; background: var(--bg); flex-shrink: 0;
+        }
+        .submode-btn {
+            flex: 1; padding: 6px; text-align: center; font-size: 10px;
+            font-weight: 600; color: var(--dim); background: none;
+            border: none; border-bottom: 2px solid transparent;
+            cursor: pointer; text-transform: uppercase; letter-spacing: .3px;
+        }
+        .submode-btn.active { color: var(--success); border-bottom-color: var(--success); }
+
+        .remote-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .sub-dpad-wrap {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 10px; padding: 8px; overflow-y: auto;
+        }
+        .sub-dpad-wrap.full { flex: 1; }
+        .sub-dpad-wrap.half { flex: 0 0 auto; }
+        .sub-trackpad-wrap {
+            flex: 1; display: flex; flex-direction: column; overflow: hidden;
+            min-height: 0;
+        }
+        .sub-trackpad-area {
+            flex: 1; position: relative; overflow: hidden;
+            background: var(--surface); touch-action: none;
+            border-bottom: 1px solid var(--surface2);
+        }
+        .sub-trackpad-area::before {
+            content: ''; position: absolute; inset: 12px;
+            border: 1px dashed #333; border-radius: var(--radius);
+            pointer-events: none;
+        }
+        .trackpad-hint {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #333; font-size: 13px; text-align: center;
+            pointer-events: none; line-height: 1.6;
+        }
+        .trackpad-crosshair {
+            position: absolute; width: 10px; height: 10px;
+            border-radius: 50%; background: var(--primary);
+            box-shadow: 0 0 8px var(--primary);
+            pointer-events: none; opacity: 0;
+            transform: translate(-50%, -50%);
+            transition: opacity 0.15s;
+        }
+        .trackpad-crosshair.active { opacity: 0.8; }
+        .trackpad-tap-ripple {
+            position: absolute; width: 40px; height: 40px;
+            border: 2px solid var(--primary); border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%,-50%) scale(0);
+            animation: ripple .35s ease-out forwards;
+        }
+        .trackpad-info {
+            text-align: center; padding: 3px;
+            font-size: 10px; color: var(--dim);
+            background: var(--bg); flex-shrink: 0;
+        }
+
+        /* ===== GYRO MODE ===== */
+        .gyro-wrap {
+            flex: 1; display: flex; flex-direction: column; overflow: hidden;
+        }
+        .gyro-area {
+            flex: 1; position: relative; overflow: hidden;
+            background: radial-gradient(ellipse at center, #1a1a30 0%, #0a0a0a 100%);
+            touch-action: none;
+        }
+        .gyro-crosshair {
+            position: absolute; width: 20px; height: 20px;
+            border: 2px solid var(--primary); border-radius: 50%;
+            pointer-events: none; opacity: 0;
+            transform: translate(-50%, -50%);
+            transition: opacity 0.2s;
+            box-shadow: 0 0 12px var(--primary), inset 0 0 4px var(--primary);
+        }
+        .gyro-crosshair.active { opacity: 1; }
+        .gyro-crosshair::before, .gyro-crosshair::after {
+            content: ''; position: absolute; background: var(--primary);
+        }
+        .gyro-crosshair::before {
+            width: 2px; height: 8px; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .gyro-crosshair::after {
+            width: 8px; height: 2px; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .gyro-scroll-btns {
+            position: absolute; right: 6px; top: 50%;
+            transform: translateY(-50%);
+            display: flex; flex-direction: column;
+            align-items: center; gap: 3px;
+            z-index: 10; user-select: none;
+            touch-action: none;
+        }
+        .gyro-scroll-btns .scroll-row {
+            display: flex; gap: 3px;
+        }
+        .gyro-scroll-btn {
+            width: 46px; height: 46px;
+            background: rgba(20, 20, 40, 0.85);
+            border: 1px solid #444;
+            color: var(--text); font-size: 18px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; border-radius: 8px;
+            touch-action: none; user-select: none;
+            transition: background 0.1s, border-color 0.1s;
+        }
+        .gyro-scroll-btn:active, .gyro-scroll-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+        .gyro-trigger-btn {
+            width: 100%; height: 70px; background: var(--accent);
+            border: 2px solid #333; color: var(--text); font-size: 16px;
+            font-weight: 700; cursor: pointer; text-transform: uppercase;
+            letter-spacing: 1px; flex-shrink: 0;
+            transition: background 0.3s, border-color 0.3s, opacity 0.3s;
+        }
+        .gyro-trigger-btn.awake {
+            background: var(--primary); border-color: var(--primary);
+            animation: gyro-pulse 2s ease-in-out infinite;
+        }
+        .gyro-trigger-btn.sleeping {
+            opacity: 0.5;
+        }
+        @keyframes gyro-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(0,122,255,0.4); }
+            50% { box-shadow: 0 0 16px 4px rgba(0,122,255,0.2); }
+        }
+        .gyro-hint {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #333; font-size: 13px; text-align: center;
+            pointer-events: none; line-height: 1.8;
+        }
+        .gyro-controls {
+            display: flex; gap: 6px; padding: 6px 10px;
+            background: var(--surface); flex-shrink: 0;
+            flex-wrap: wrap; justify-content: center;
+        }
+        .gyro-status {
+            text-align: center; padding: 4px;
+            font-size: 10px; color: var(--dim);
+            background: var(--bg); flex-shrink: 0;
+        }
+
+        /* D-Pad */
+        .dpad { position: relative; width: 180px; height: 180px; }
+        .db {
+            position: absolute; background: var(--surface);
+            border: 1px solid var(--surface2); color: var(--text);
+            font-size: 24px; display: flex; align-items: center;
+            justify-content: center; cursor: pointer;
+            border-radius: var(--radius); width: 56px; height: 56px;
+        }
+        .db:active { background: var(--primary); transform: scale(.92); }
+        .db-u { top:0; left:50%; transform: translateX(-50%); }
+        .db-u:active { transform: translateX(-50%) scale(.92); }
+        .db-d { bottom:0; left:50%; transform: translateX(-50%); }
+        .db-d:active { transform: translateX(-50%) scale(.92); }
+        .db-l { left:0; top:50%; transform: translateY(-50%); }
+        .db-l:active { transform: translateY(-50%) scale(.92); }
+        .db-r { right:0; top:50%; transform: translateY(-50%); }
+        .db-r:active { transform: translateY(-50%) scale(.92); }
+        .db-ok {
+            top:50%; left:50%; transform: translate(-50%,-50%);
+            width: 64px; height: 64px; border-radius: 50%;
+            background: var(--primary); font-size: 14px; font-weight: 700;
+        }
+        .db-ok:active { background: #c13050; transform: translate(-50%,-50%) scale(.92); }
+        .media-row, .action-row {
+            display: flex; gap: 8px; width: 100%; max-width: 340px;
+            justify-content: center; flex-wrap: wrap;
+        }
+        .mbtn {
+            height: 44px; padding: 0 16px; background: var(--surface);
+            border: 1px solid var(--surface2); color: var(--text);
+            border-radius: var(--radius); font-size: 18px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .mbtn:active { background: var(--accent); transform: scale(.93); }
+        .mbtn.pp { width: 64px; background: var(--accent); }
+        .abtn {
+            height: 36px; padding: 0 12px; background: var(--surface);
+            border: 1px solid var(--surface2); color: var(--text);
+            border-radius: var(--radius); font-size: 11px; font-weight: 600;
+            cursor: pointer;
+        }
+        .abtn:active { background: var(--accent); }
+        .search-row {
+            display: flex; gap: 8px; width: 100%; max-width: 340px;
+        }
+        .search-input {
+            flex: 1; height: 40px; background: var(--surface);
+            border: 1px solid var(--surface2); border-radius: var(--radius);
+            color: var(--text); font-size: 14px; padding: 0 12px;
+            outline: none; -webkit-user-select: text; user-select: text;
+        }
+        .search-input:focus { border-color: var(--primary); }
+        .search-go {
+            width: 46px; height: 40px; background: var(--primary);
+            border: none; border-radius: var(--radius); color: #fff;
+            font-size: 16px; cursor: pointer;
+        }
+
+        /* ===== BROWSE PANEL (Sites + Tabs merged) ===== */
+        .browse-panel {
+            flex: 1; display: flex; flex-direction: column; overflow: hidden;
+        }
+        .browse-section { padding: 10px 14px; overflow-y: auto; flex: 1; }
+        .browse-section-title {
+            font-size: 11px; font-weight: 700; color: var(--dim);
+            text-transform: uppercase; letter-spacing: 1px;
+            margin-bottom: 8px; padding-bottom: 4px;
+            border-bottom: 1px solid var(--surface2);
+        }
+        .site-card {
+            background: var(--surface); border: 1px solid var(--surface2);
+            border-radius: var(--radius); padding: 14px; cursor: pointer;
+            display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+        }
+        .site-card:active { background: var(--accent); }
+        .site-icon { font-size: 26px; }
+        .site-info { flex: 1; }
+        .site-name { font-weight: 600; font-size: 14px; }
+        .site-url { font-size: 11px; color: var(--dim); margin-top: 1px; }
+        .site-card.active-site { border-color: var(--success); }
+        .nav-url-row { display: flex; gap: 8px; margin-bottom: 10px; }
+        .nav-input {
+            flex: 1; height: 40px; background: var(--surface);
+            border: 1px solid var(--surface2); border-radius: var(--radius);
+            color: var(--text); font-size: 13px; padding: 0 12px;
+            outline: none; -webkit-user-select: text; user-select: text;
+        }
+        .nav-input:focus { border-color: var(--primary); }
+        .nav-go {
+            width: 46px; height: 40px; background: var(--primary);
+            border: none; border-radius: var(--radius); color: #fff;
+            font-size: 16px; cursor: pointer;
+        }
+        .tab-card {
+            background: var(--surface); border: 1px solid var(--surface2);
+            border-radius: var(--radius); padding: 10px 12px; margin-bottom: 6px;
+            cursor: pointer;
+        }
+        .tab-card:active { background: var(--accent); }
+        .tab-card.active-tab { border-color: var(--success); }
+        .tab-title { font-weight: 600; font-size: 12px; }
+        .tab-url { font-size: 10px; color: var(--dim); margin-top: 2px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* ===== TOAST ===== */
+        .toast {
+            position: fixed; bottom: 16px; left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: var(--surface2); color: var(--text);
+            padding: 8px 20px; border-radius: 20px; font-size: 13px;
+            opacity: 0; transition: all .25s; pointer-events: none; z-index: 500;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.err { background: var(--danger); }
+
+        @media (max-height: 580px) {
+            .dpad { width: 150px; height: 150px; }
+            .db { width: 48px; height: 48px; font-size: 20px; }
+            .db-ok { width: 54px; height: 54px; }
+        }
+
+        /* ===== PC MODE OVERRIDES ===== */
+        body.pc-mode {
+            --primary: #ff6b35;
+            --accent: #8b0000;
+        }
+        body.pc-mode .topbar { background: #2a0a0a; border-bottom-color: #ff6b35; }
+        body.pc-mode .mode-tabs { background: #2a0a0a; }
+        .mode-toggle { font-weight: bold; font-size: 11px; }
+        .mode-toggle.pc-active { background: #ff6b35 !important; color: #000 !important; }
+
+        /* ===== MONITOR PICKER ===== */
+        .monitor-picker {
+            display: none; padding: 4px 8px; background: #1a0a0a;
+            border-top: 1px solid #333; align-items: center; gap: 6px;
+            overflow-x: auto; flex-shrink: 0;
+        }
+        body.pc-mode .monitor-picker { display: flex; }
+        .monitor-picker-label { font-size: 11px; color: var(--dim); white-space: nowrap; }
+        .mon-btn {
+            background: var(--surface2); color: var(--text); border: 1px solid #444;
+            padding: 4px 12px; border-radius: 6px; font-size: 11px;
+            cursor: pointer; white-space: nowrap; flex-shrink: 0;
+        }
+        .mon-btn.active { background: #ff6b35; color: #000; border-color: #ff6b35; font-weight: bold; }
+
+        /* ===== STANDBY OVERLAY ===== */
+        .standby-overlay {
+            position: fixed; inset: 0; z-index: 9999;
+            background: rgba(0,0,0,.95);
+            display: none; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 16px; text-align: center;
+        }
+        .standby-overlay.active { display: flex; }
+        .standby-icon { font-size: 64px; opacity: .7; }
+        .standby-title { font-size: 22px; font-weight: bold; color: #eee; }
+        .standby-desc { font-size: 14px; color: #888; margin-bottom: 12px; }
+        .standby-start-btn {
+            background: var(--success); color: #000; border: none;
+            padding: 16px 48px; border-radius: 12px;
+            font-size: 18px; font-weight: bold; cursor: pointer;
+            transition: transform .1s, background .2s;
+        }
+        .standby-start-btn:active { transform: scale(.95); background: #3dbb92; }
+    </style>
+</head>
+<body>
+
+<!-- Standby overlay -->
+<div class="standby-overlay" id="standbyOverlay">
+    <div class="standby-icon">📽️</div>
+    <div class="standby-title">Projector Inactive</div>
+    <div class="standby-desc">Browser is not running on the server</div>
+    <button class="standby-start-btn" id="standbyStartBtn" onclick="startBrowser()">▶ Tap to Start</button>
+</div>
+
+<!-- Top bar -->
+<div class="topbar">
+    <span class="status-dot" id="dot"></span>
+    <span class="topbar-title" id="titleText">Disconnected</span>
+    <button class="topbar-btn mode-toggle" id="modeToggle" onclick="togglePcMode()">🖥️ Browser</button>
+    <button class="topbar-btn" onclick="doConnect()">Connect</button>
+    <button class="topbar-btn" onclick="doReload()">Reload</button>
+</div>
+
+<!-- Mode tabs (3 modes) -->
+<div class="mode-tabs">
+    <button class="mode-tab active" data-mode="mirror" onclick="setMode('mirror')">Mirror</button>
+    <button class="mode-tab" data-mode="remote" onclick="setMode('remote')">Remote</button>
+    <button class="mode-tab" data-mode="browse" onclick="setMode('browse')">Browse</button>
+</div>
+
+<!-- ==================== MIRROR PANEL ==================== -->
+<div class="panel active" id="panel-mirror">
+    <div class="mirror-wrap" id="mirrorWrap">
+        <div class="mirror-canvas-container" id="mirrorContainer">
+            <img class="mirror-img" id="mirrorImg" src="" alt="Mirror" draggable="false">
+        </div>
+        <div class="mirror-hint" id="mirrorHint">Pinch to zoom &middot; Tap to click &middot; Swipe to scroll</div>
+        <div class="mirror-zoom-badge" id="zoomBadge">1.0x</div>
+    </div>
+    <div class="mirror-controls">
+        <button class="mc-btn" onclick="mirrorResetZoom()">&#x229E; Reset</button>
+        <button class="mc-btn" onclick="press('back')">&larr; Esc</button>
+        <button class="mc-btn" onclick="press('backspace')">&#x232B; Bksp</button>
+        <button class="mc-btn" onclick="press('playpause')">&#x23EF; Play</button>
+        <button class="mc-btn" onclick="press('fullscreen')">&#x26F6; Full</button>
+        <button class="mc-btn" onclick="press('mute')">&#x1F507;</button>
+        <button class="mc-btn" onclick="apiPost('/api/go-back')">&#x25C1;</button>
+        <button class="mc-btn" onclick="apiPost('/api/go-forward')">&#x25B7;</button>
+    </div>
+    <div class="monitor-picker" id="monitorPicker">
+        <span class="monitor-picker-label">Monitor:</span>
+    </div>
+</div>
+
+<!-- ==================== REMOTE PANEL ==================== -->
+<div class="panel" id="panel-remote">
+    <div class="remote-panel">
+        <div class="remote-submode-bar">
+            <button class="submode-btn active" data-sub="dpad" onclick="setSubMode('dpad')">D-Pad</button>
+            <button class="submode-btn" data-sub="combo" onclick="setSubMode('combo')">Combo</button>
+            <button class="submode-btn" data-sub="trackpad" onclick="setSubMode('trackpad')">Trackpad</button>
+            <button class="submode-btn" data-sub="gyro" onclick="setSubMode('gyro')">Gyro</button>
+        </div>
+        <div class="remote-content" id="remoteContent"></div>
+    </div>
+</div>
+
+<!-- ==================== BROWSE PANEL (Sites + Tabs) ==================== -->
+<div class="panel" id="panel-browse">
+    <div class="browse-panel">
+        <div class="browse-section">
+            <div class="nav-url-row">
+                <input class="nav-input" id="navUrl" placeholder="Enter any URL..."
+                       autocomplete="off" autocorrect="off">
+                <button class="nav-go" onclick="goUrl()">Go</button>
+            </div>
+            <div class="browse-section-title">Quick Sites</div>
+            <div id="siteCards"></div>
+            <div class="browse-section-title" style="margin-top:12px">Open Tabs</div>
+            <div id="tabsList"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================
+// CONFIG
+// ============================================
+const SCROLL_MULTIPLIER = 3;
+const TRACKPAD_SENSITIVITY = 2.2;
+const TRACKPAD_SCROLL_MULT = 2.5;
+const MOVE_SEND_INTERVAL = 16;
+
+let currentMode = 'mirror';
+let currentSubMode = 'dpad';
+
+// Pointer acceleration: velocity-based dynamic sensitivity
+function accelMult(rawDist, dt) {
+    if (dt <= 0) dt = 1;
+    var v = rawDist / dt; // px per ms
+    var t = Math.max(0, Math.min(1, (v - 0.3) / 2.7));
+    return 1.0 + t * t * 2.5; // 1.0x slow → 3.5x fast
+}
+
+// Haptic feedback helper
+function haptic(ms) { if (navigator.vibrate) navigator.vibrate(ms || 15); }
+
+// ============================================
+// API helpers
+// ============================================
+async function apiPost(path, body = null) {
+    try {
+        const opts = { method: 'POST' };
+        if (body) {
+            opts.headers = { 'Content-Type': 'application/json' };
+            opts.body = JSON.stringify(body);
+        }
+        const res = await fetch(path, opts);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'HTTP ' + res.status);
+        return data;
+    } catch (err) {
+        showToast(err.message, true);
+        throw err;
+    }
+}
+async function apiGet(path) { const r = await fetch(path); return r.json(); }
+
+// ============================================
+// MODE SWITCHING
+// ============================================
+function hasTrackpad() {
+    return currentMode === 'remote' && (currentSubMode === 'combo' || currentSubMode === 'trackpad' || currentSubMode === 'gyro');
+}
+
+function setMode(mode) {
+    haptic(15);
+    stopTrackpad();
+    if (currentSubMode === 'gyro') stopGyro();
+    const hadTP = hasTrackpad();
+    currentMode = mode;
+    document.querySelectorAll('.mode-tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.mode === mode));
+    document.querySelectorAll('.panel').forEach(p =>
+        p.classList.toggle('active', p.id === 'panel-' + mode));
+
+    if (mode === 'mirror') startMirror(); else stopMirror();
+    if (mode === 'remote') renderSubMode();
+    if (mode === 'browse') { loadSites(); loadTabs(); }
+
+    const hasTP = hasTrackpad();
+    if (!hadTP && hasTP) showCursor();
+    if (hadTP && !hasTP) hideCursor();
+}
+
+// ============================================
+// REMOTE SUB-MODES
+// ============================================
+function setSubMode(sub) {
+    haptic(15);
+    stopTrackpad();
+    if (currentSubMode === 'gyro') stopGyro();
+    const hadTP = hasTrackpad();
+    currentSubMode = sub;
+    document.querySelectorAll('.submode-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.sub === sub));
+    renderSubMode();
+    const hasTP = hasTrackpad();
+    if (!hadTP && hasTP) showCursor();
+    if (hadTP && !hasTP) hideCursor();
+}
+
+function renderSubMode() {
+    const c = document.getElementById('remoteContent');
+    if (!c) return;
+    if (currentSubMode === 'dpad') {
+        c.innerHTML = '<div class="sub-dpad-wrap full">' + dpadHTML() + mediaHTML() + actionHTML() + searchHTML() + '</div>';
+    } else if (currentSubMode === 'combo') {
+        c.innerHTML =
+            '<div class="sub-trackpad-wrap">' +
+                '<div class="trackpad-info" id="trackpadInfo">Cursor: --</div>' +
+                '<div class="sub-trackpad-area" id="trackpadArea">' +
+                    '<div class="trackpad-hint" id="trackpadHint">Drag to move &middot; Tap to click</div>' +
+                    '<div class="trackpad-crosshair" id="trackpadDot"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="sub-dpad-wrap half">' + dpadHTML() + mediaHTML() + actionHTML() + searchHTML() + '</div>';
+    } else if (currentSubMode === 'trackpad') {
+        c.innerHTML =
+            '<div class="sub-trackpad-wrap">' +
+                '<div class="trackpad-info" id="trackpadInfo">Cursor: --</div>' +
+                '<div class="sub-trackpad-area" id="trackpadArea">' +
+                    '<div class="trackpad-hint" id="trackpadHint">Drag to move &middot; Tap to click &middot; 2-finger scroll</div>' +
+                    '<div class="trackpad-crosshair" id="trackpadDot"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:6px;padding:6px 10px;background:var(--surface);flex-wrap:wrap;justify-content:center;flex-shrink:0">' +
+                '<button class="mc-btn" onclick="press(\'back\')">&larr; Esc</button>' +
+                '<button class="mc-btn" onclick="press(\'backspace\')">&#x232B; Bksp</button>' +
+                '<button class="mc-btn" onclick="press(\'playpause\')">&#x23EF; Play</button>' +
+                '<button class="mc-btn" onclick="press(\'fullscreen\')">&#x26F6; Full</button>' +
+                '<button class="mc-btn" onclick="press(\'mute\')">&#x1F507;</button>' +
+                '<button class="mc-btn" onclick="apiPost(\'/api/go-back\')">&#x25C1;</button>' +
+                '<button class="mc-btn" onclick="apiPost(\'/api/go-forward\')">&#x25B7;</button>' +
+            '</div>';
+    } else if (currentSubMode === 'gyro') {
+        c.innerHTML =
+            '<div class="gyro-wrap">' +
+                '<div class="gyro-status" id="gyroStatus">Gyro: sleeping &middot; Tap to wake</div>' +
+                '<div class="gyro-area" id="gyroArea">' +
+                    '<div class="gyro-hint" id="gyroHint">Tap to wake &middot; Flick wrist to aim<br>Tap again to click<br>Auto-sleeps after 4s<br><br><span style="color:#fa0;font-size:11px;line-height:1.3;display:block">Chrome/Android: If no movement, enable<br><b>chrome://flags/#unsafely-treat-insecure-origin-as-secure</b><br>and add this IP.</span></div>' +
+                    '<div class="gyro-crosshair" id="gyroDot"></div>' +
+                    '<div id="gyroDebug" style="position:absolute; top:10px; left:10px; color:#0f0; font-family:monospace; font-size:12px; pointer-events:none; text-shadow: 1px 1px 0 #000; z-index:100;"></div>' +
+                    '<div class="gyro-scroll-btns" id="gyroScrollBtns">' +
+                        '<button class="gyro-scroll-btn" data-scroll="up">&#x25B2;</button>' +
+                        '<div class="scroll-row">' +
+                            '<button class="gyro-scroll-btn" data-scroll="left">&#x25C0;</button>' +
+                            '<button class="gyro-scroll-btn" data-scroll="right">&#x25B6;</button>' +
+                        '</div>' +
+                        '<button class="gyro-scroll-btn" data-scroll="down">&#x25BC;</button>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="gyro-controls">' +
+                    '<button class="mc-btn" onclick="press(\'back\')">&larr; Esc</button>' +
+                    '<button class="mc-btn" onclick="press(\'playpause\')">&#x23EF; Play</button>' +
+                    '<button class="mc-btn" onclick="press(\'fullscreen\')">&#x26F6; Full</button>' +
+                    '<button class="mc-btn" onclick="press(\'mute\')">&#x1F507;</button>' +
+                '</div>' +
+                '<button class="gyro-trigger-btn sleeping" id="gyroTrigger">&#x1F3AF; TAP TO WAKE</button>' +
+            '</div>';
+        setTimeout(bindGyro, 50);
+    }
+    if (currentSubMode === 'combo' || currentSubMode === 'trackpad') bindTrackpad();
+    const si = document.getElementById('searchInput');
+    if (si) si.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendText(); } });
+}
+
+function dpadHTML() {
+    return '<div class="dpad">' +
+        '<button class="db db-u" onclick="press(\'up\')">&#x25B2;</button>' +
+        '<button class="db db-d" onclick="press(\'down\')">&#x25BC;</button>' +
+        '<button class="db db-l" onclick="press(\'left\')">&#x25C4;</button>' +
+        '<button class="db db-r" onclick="press(\'right\')">&#x25BA;</button>' +
+        '<button class="db db-ok" onclick="press(\'enter\')">OK</button></div>';
+}
+function mediaHTML() {
+    return '<div class="media-row">' +
+        '<button class="mbtn" onclick="press(\'rewind\')">&#x23EA;</button>' +
+        '<button class="mbtn pp" onclick="press(\'playpause\')">&#x23EF;</button>' +
+        '<button class="mbtn" onclick="press(\'forward\')">&#x23E9;</button></div>';
+}
+function actionHTML() {
+    return '<div class="action-row">' +
+        '<button class="abtn" onclick="press(\'back\')">&larr; Esc</button>' +
+        '<button class="abtn" onclick="press(\'backspace\')">&#x232B; Bksp</button>' +
+        '<button class="abtn" onclick="press(\'fullscreen\')">&#x26F6; Full</button>' +
+        '<button class="abtn" onclick="press(\'mute\')">&#x1F507; Mute</button>' +
+        '<button class="abtn" onclick="press(\'tab\')">&#x21E5; Tab</button></div>';
+}
+function searchHTML() {
+    return '<div class="search-row">' +
+        '<input class="search-input" id="searchInput" placeholder="Type text..." autocomplete="off" autocorrect="off">' +
+        '<button class="search-go" onclick="sendText()">&#x27A4;</button></div>';
+}
+
+// ============================================
+// MIRROR - WebSocket Screencast + Zoom
+// Switches between CDP screencast (browser mode) and
+// desktop capture (PC mode — all monitors stitched)
+// ============================================
+let mirrorRunning = false;
+let mirrorWS = null;
+let mirrorFallbackTimer = null;
+let mirrorReconnDelay = 500;
+let mirrorDesktopMode = false; // tracks which WS we're connected to
+
+function getMirrorWSPath() {
+    return document.body.classList.contains('pc-mode')
+        ? '/ws/screencast-desktop'
+        : '/ws/screencast';
+}
+
+function startMirror() {
+    if (mirrorRunning) return;
+    mirrorRunning = true;
+    mirrorReconnDelay = 500;
+    mirrorDesktopMode = document.body.classList.contains('pc-mode');
+    connectScreencast();
+}
+function stopMirror() {
+    mirrorRunning = false;
+    if (mirrorWS) { mirrorWS.close(); mirrorWS = null; }
+    if (mirrorFallbackTimer) { clearTimeout(mirrorFallbackTimer); mirrorFallbackTimer = null; }
+}
+
+function connectScreencast() {
+    if (mirrorWS) return;
+    // If PC mode changed since last connect, update path
+    var nowDesktop = document.body.classList.contains('pc-mode');
+    mirrorDesktopMode = nowDesktop;
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const path = getMirrorWSPath();
+    const ws = new WebSocket(proto + '//' + location.host + path);
+    ws.onopen = function() { mirrorReconnDelay = 500; };
+    ws.onmessage = function(e) {
+        const img = document.getElementById('mirrorImg');
+        if (img) img.src = 'data:image/jpeg;base64,' + e.data;
+    };
+    ws.onerror = function() { ws.close(); };
+    ws.onclose = function() {
+        mirrorWS = null;
+        if (mirrorRunning) {
+            pollFallback();
+            setTimeout(function() {
+                if (mirrorRunning && !mirrorWS) connectScreencast();
+            }, mirrorReconnDelay);
+            mirrorReconnDelay = Math.min(mirrorReconnDelay * 2, 15000);
+        }
+    };
+    mirrorWS = ws;
+}
+
+// Re-connect mirror when PC mode toggles (so it switches WS endpoint)
+function refreshMirrorForMode() {
+    if (!mirrorRunning) return;
+    var nowDesktop = document.body.classList.contains('pc-mode');
+    if (nowDesktop !== mirrorDesktopMode) {
+        stopMirror();
+        setTimeout(startMirror, 200);
+    }
+}
+
+function refreshGyroForMode() {
+    if (gyroWS) {
+        gyroWS.close();
+    }
+}
+
+function pollFallback() {
+    if (!mirrorRunning || mirrorWS) return;
+    fetchFallbackFrame();
+}
+function fetchFallbackFrame() {
+    if (!mirrorRunning) return;
+    const img = document.getElementById('mirrorImg');
+    const tmp = new Image();
+    tmp.onload = function() { img.src = tmp.src; if (mirrorRunning && !mirrorWS) mirrorFallbackTimer = setTimeout(fetchFallbackFrame, 333); };
+    tmp.onerror = function() { if (mirrorRunning && !mirrorWS) mirrorFallbackTimer = setTimeout(fetchFallbackFrame, 2000); };
+    tmp.src = '/api/screenshot.jpg?quality=30&t=' + Date.now();
+}
+
+// ---- Pinch-to-Zoom + Pan + Tap on mirror ----
+(function() {
+    var wrap = document.getElementById('mirrorWrap');
+    var container = document.getElementById('mirrorContainer');
+    var img = document.getElementById('mirrorImg');
+    var hint = document.getElementById('mirrorHint');
+    var badge = document.getElementById('zoomBadge');
+
+    var scale = 1, panX = 0, panY = 0;
+    var pinchStartDist = 0, pinchStartScale = 1;
+    var touchStart = null, touchMoved = false, hintHidden = false;
+    var isPinching = false, isPanning = false;
+    var lastPan = null;
+
+    function hideHint() { if (!hintHidden) { hint.style.opacity = '0'; hintHidden = true; } }
+
+    function applyTransform() {
+        var wr = wrap.getBoundingClientRect();
+        var mx = Math.max(0, (wr.width * scale - wr.width) / 2);
+        var my = Math.max(0, (wr.height * scale - wr.height) / 2);
+        panX = Math.max(-mx, Math.min(mx, panX));
+        panY = Math.max(-my, Math.min(my, panY));
+        container.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + scale + ')';
+        badge.textContent = scale.toFixed(1) + 'x';
+        badge.classList.toggle('visible', scale > 1.05);
+    }
+
+    function relPos(cx, cy) {
+        var r = img.getBoundingClientRect();
+        return { x: Math.max(0, Math.min(1, (cx - r.left) / r.width)),
+                 y: Math.max(0, Math.min(1, (cy - r.top) / r.height)) };
+    }
+
+    function showRipple(cx, cy) {
+        var r = wrap.getBoundingClientRect();
+        var el = document.createElement('div');
+        el.className = 'click-ripple';
+        el.style.left = (cx - r.left) + 'px';
+        el.style.top = (cy - r.top) + 'px';
+        wrap.appendChild(el);
+        setTimeout(function() { el.remove(); }, 500);
+    }
+
+    function pinchDist(a, b) { return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
+    function mid(a, b) { return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 }; }
+
+    wrap.addEventListener('touchstart', function(e) {
+        e.preventDefault(); hideHint();
+        if (e.touches.length === 2) {
+            isPinching = true; isPanning = false; touchMoved = true;
+            pinchStartDist = pinchDist(e.touches[0], e.touches[1]);
+            pinchStartScale = scale;
+            lastPan = mid(e.touches[0], e.touches[1]);
+        } else if (e.touches.length === 1) {
+            var t = e.touches[0];
+            touchStart = { x: t.clientX, y: t.clientY, time: Date.now() };
+            touchMoved = false;
+            if (scale > 1.05) { isPanning = true; lastPan = { x: t.clientX, y: t.clientY }; }
+        }
+    }, { passive: false });
+
+    wrap.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        if (e.touches.length === 2 && isPinching) {
+            var d = pinchDist(e.touches[0], e.touches[1]);
+            scale = Math.max(1, Math.min(5, pinchStartScale * (d / pinchStartDist)));
+            var m = mid(e.touches[0], e.touches[1]);
+            if (lastPan) { panX += m.x - lastPan.x; panY += m.y - lastPan.y; }
+            lastPan = m;
+            applyTransform();
+            return;
+        }
+        if (e.touches.length === 1 && touchStart) {
+            var t = e.touches[0];
+            var dx = t.clientX - touchStart.x, dy = t.clientY - touchStart.y;
+            if (Math.abs(dx) > 8 || Math.abs(dy) > 8) touchMoved = true;
+            if (isPanning && scale > 1.05 && lastPan) {
+                panX += t.clientX - lastPan.x; panY += t.clientY - lastPan.y;
+                lastPan = { x: t.clientX, y: t.clientY };
+                applyTransform();
+            }
+        }
+    }, { passive: false });
+
+    wrap.addEventListener('touchend', function(e) {
+        if (e.touches.length === 0) {
+            isPinching = false;
+            if (scale <= 1.05) { scale = 1; panX = 0; panY = 0; applyTransform(); }
+            if (!touchMoved && touchStart) {
+                var t = e.changedTouches[0];
+                if (!isPanning || (Math.abs(t.clientX - touchStart.x) < 8 && Math.abs(t.clientY - touchStart.y) < 8)) {
+                    var pos = relPos(t.clientX, t.clientY);
+                    haptic(25);
+                    showRipple(t.clientX, t.clientY);
+                    apiPost('/api/click', { x: pos.x, y: pos.y }).catch(function(){});
+                }
+            } else if (touchMoved && !isPanning && !isPinching && touchStart && scale < 1.1) {
+                var t2 = e.changedTouches[0];
+                var sdx = t2.clientX - touchStart.x, sdy = t2.clientY - touchStart.y;
+                if (Math.abs(sdx) > 15 || Math.abs(sdy) > 15) {
+                    var sp = relPos(touchStart.x, touchStart.y);
+                    apiPost('/api/scroll', { x: sp.x, y: sp.y, deltaX: -sdx * SCROLL_MULTIPLIER, deltaY: -sdy * SCROLL_MULTIPLIER }).catch(function(){});
+                }
+            }
+            touchStart = null; isPanning = false; lastPan = null;
+        } else if (e.touches.length === 1) {
+            isPinching = false;
+            var t3 = e.touches[0];
+            lastPan = { x: t3.clientX, y: t3.clientY };
+            isPanning = scale > 1.05;
+        }
+    }, { passive: false });
+
+    wrap.addEventListener('click', function(e) {
+        if (e.target === wrap || e.target === img || e.target === container) {
+            var pos = relPos(e.clientX, e.clientY);
+            showRipple(e.clientX, e.clientY);
+            apiPost('/api/click', { x: pos.x, y: pos.y }).catch(function(){});
+            hideHint();
+        }
+    });
+
+    wrap.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        scale = Math.max(1, Math.min(5, scale * (e.deltaY > 0 ? 0.9 : 1.1)));
+        if (scale <= 1.05) { scale = 1; panX = 0; panY = 0; }
+        applyTransform();
+    }, { passive: false });
+
+    window.mirrorResetZoom = function() { scale = 1; panX = 0; panY = 0; applyTransform(); showToast('Zoom reset'); };
+})();
+
+// ============================================
+// D-PAD / KEYS
+// ============================================
+async function press(key) {
+    haptic(25);
+    try { await apiPost('/api/press/' + key); } catch(e) {}
+}
+async function sendText() {
+    haptic(20);
+    var inp = document.getElementById('searchInput');
+    if (!inp) return;
+    var text = inp.value.trim();
+    if (!text) return;
+    try { await apiPost('/api/type', { text: text }); showToast('Sent: "' + text.substring(0, 30) + '"'); inp.value = ''; } catch(e) {}
+}
+
+// ============================================
+// TRACKPAD (binds to dynamic #trackpadArea)
+// ============================================
+async function showCursor() {
+    try {
+        var d = await apiPost('/api/cursor/show');
+        updateTrackpadInfo(d.x, d.y);
+    } catch(e) {}
+}
+async function hideCursor() {
+    try { await apiPost('/api/cursor/hide'); } catch(e) {}
+    var el = document.getElementById('trackpadInfo');
+    if (el) el.textContent = 'Cursor: hidden';
+}
+function updateTrackpadInfo(x, y) {
+    var el = document.getElementById('trackpadInfo');
+    if (el) el.textContent = 'Cursor: ' + Math.round(x) + ', ' + Math.round(y);
+}
+
+// --- Trackpad WebSocket state (module-level for cleanup) ---
+var trackpadWS = null;
+var trackpadRAF = null;
+var TP_EMA_ALPHA = 0.6;
+
+function stopTrackpad() {
+    if (trackpadRAF) { cancelAnimationFrame(trackpadRAF); trackpadRAF = null; }
+    if (trackpadWS) { trackpadWS.close(); trackpadWS = null; }
+}
+
+function bindTrackpad() {
+    var area = document.getElementById('trackpadArea');
+    var dot = document.getElementById('trackpadDot');
+    var hint = document.getElementById('trackpadHint');
+    if (!area) return;
+
+    var t1 = null, t2 = null, moved = false, hh = false;
+
+    // --- WebSocket connection (same endpoint as gyro — handles dx/dy, click, scroll) ---
+    var tpReconnDelay = 500;
+    function openTrackpadWS() {
+        if (trackpadWS) return;
+        var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        trackpadWS = new WebSocket(proto + '//' + location.host + '/ws/gyro');
+        trackpadWS.onopen = function() { tpReconnDelay = 500; };
+        trackpadWS.onmessage = function(ev) {
+            try {
+                var d = JSON.parse(ev.data);
+                if (d.x !== undefined) updateTrackpadInfo(d.x, d.y);
+            } catch(e) {}
+        };
+        trackpadWS.onerror = function() { trackpadWS.close(); };
+        trackpadWS.onclose = function() {
+            trackpadWS = null;
+            if (hasTrackpad()) {
+                setTimeout(function() {
+                    if (!trackpadWS && hasTrackpad()) openTrackpadWS();
+                }, tpReconnDelay);
+                tpReconnDelay = Math.min(tpReconnDelay * 2, 15000);
+            }
+        };
+    }
+    openTrackpadWS();
+
+    // --- EMA + rAF send loop (same smooth tech as gyro) ---
+    var tpRawDX = 0, tpRawDY = 0;
+    var tpSmoothedDX = 0, tpSmoothedDY = 0;
+
+    function tpSendLoop() {
+        trackpadRAF = requestAnimationFrame(tpSendLoop);
+        tpSmoothedDX = tpRawDX * TP_EMA_ALPHA + tpSmoothedDX * (1 - TP_EMA_ALPHA);
+        tpSmoothedDY = tpRawDY * TP_EMA_ALPHA + tpSmoothedDY * (1 - TP_EMA_ALPHA);
+        tpRawDX = 0; tpRawDY = 0;
+        var dx = tpSmoothedDX, dy = tpSmoothedDY;
+        if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) return;
+        if (trackpadWS && trackpadWS.readyState === WebSocket.OPEN) {
+            trackpadWS.send(JSON.stringify({ dx: dx, dy: dy }));
+        }
+    }
+    trackpadRAF = requestAnimationFrame(tpSendLoop);
+
+    function hH() { if (!hh && hint) { hint.style.opacity = '0'; hh = true; } }
+
+    function tapRipple(cx, cy) {
+        var r = area.getBoundingClientRect();
+        var el = document.createElement('div');
+        el.className = 'trackpad-tap-ripple';
+        el.style.left = (cx - r.left) + 'px'; el.style.top = (cy - r.top) + 'px';
+        area.appendChild(el);
+        setTimeout(function(){ el.remove(); }, 400);
+    }
+
+    area.addEventListener('touchstart', function(e) {
+        e.preventDefault(); hH();
+        if (e.touches.length === 1) {
+            var touch = e.touches[0];
+            t1 = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+            t2 = null; moved = false;
+            if (dot) { dot.classList.add('active'); var r = area.getBoundingClientRect(); dot.style.left = (touch.clientX - r.left) + 'px'; dot.style.top = (touch.clientY - r.top) + 'px'; }
+        } else if (e.touches.length === 2) {
+            var a = e.touches[0], b = e.touches[1];
+            t2 = { y: (a.clientY + b.clientY) / 2, x: (a.clientX + b.clientX) / 2 };
+            t1 = null; moved = true;
+        }
+    }, { passive: false });
+
+    area.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        if (e.touches.length === 2 && t2) {
+            // 2-finger scroll — send via WS
+            var a = e.touches[0], b = e.touches[1];
+            var cy = (a.clientY + b.clientY) / 2, cx = (a.clientX + b.clientX) / 2;
+            var dy = (t2.y - cy) * TRACKPAD_SCROLL_MULT, dx = (t2.x - cx) * TRACKPAD_SCROLL_MULT;
+            t2 = { y: cy, x: cx };
+            if (trackpadWS && trackpadWS.readyState === WebSocket.OPEN) {
+                trackpadWS.send(JSON.stringify({ type: 'scroll', deltaX: dx, deltaY: dy }));
+            }
+            return;
+        }
+        if (e.touches.length === 1 && t1) {
+            var touch = e.touches[0];
+            var rawDx = touch.clientX - t1.x, rawDy = touch.clientY - t1.y;
+            var now = Date.now(), dt = now - (t1.lm || t1.time);
+            var rawDist = Math.sqrt(rawDx * rawDx + rawDy * rawDy);
+            var sens = TRACKPAD_SENSITIVITY * accelMult(rawDist, dt);
+            var dx2 = rawDx * sens, dy2 = rawDy * sens;
+            t1 = { x: touch.clientX, y: touch.clientY, time: t1.time, lm: now };
+            if (dot) { var r = area.getBoundingClientRect(); dot.style.left = (touch.clientX - r.left) + 'px'; dot.style.top = (touch.clientY - r.top) + 'px'; }
+            if (Math.abs(dx2) > 0.2 || Math.abs(dy2) > 0.2) {
+                moved = true;
+                tpRawDX += dx2;
+                tpRawDY += dy2;
+            }
+        }
+    }, { passive: false });
+
+    area.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        if (dot) dot.classList.remove('active');
+        if (!moved && t1 && e.touches.length === 0 && Date.now() - t1.time < 400) {
+            haptic(30);
+            tapRipple(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+            if (trackpadWS && trackpadWS.readyState === WebSocket.OPEN) {
+                trackpadWS.send(JSON.stringify({ type: 'click' }));
+            }
+        }
+        if (e.touches.length === 0) { t1 = null; t2 = null; moved = false; }
+    }, { passive: false });
+
+    // Desktop mouse (testing)
+    var md = false, lm = null, mm = false;
+    area.addEventListener('mousedown', function(e) { md = true; lm = { x: e.clientX, y: e.clientY, t: Date.now() }; mm = false; hH(); if (dot) dot.classList.add('active'); });
+    area.addEventListener('mousemove', function(e) {
+        if (!md || !lm) return;
+        var rawDx = e.clientX - lm.x, rawDy = e.clientY - lm.y;
+        var now = Date.now(), dt = now - (lm.t || now);
+        var rawDist = Math.sqrt(rawDx * rawDx + rawDy * rawDy);
+        var sens = TRACKPAD_SENSITIVITY * accelMult(rawDist, dt);
+        var dx = rawDx * sens, dy = rawDy * sens;
+        lm = { x: e.clientX, y: e.clientY, t: now };
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) { mm = true; tpRawDX += dx; tpRawDY += dy; }
+    });
+    area.addEventListener('mouseup', function(e) {
+        if (dot) dot.classList.remove('active');
+        if (!mm) {
+            tapRipple(e.clientX, e.clientY);
+            if (trackpadWS && trackpadWS.readyState === WebSocket.OPEN) {
+                trackpadWS.send(JSON.stringify({ type: 'click' }));
+            }
+        }
+        md = false; lm = null; mm = false;
+    });
+    area.addEventListener('mouseleave', function() { md = false; lm = null; if (dot) dot.classList.remove('active'); });
+}
+
+// ============================================
+// GYROSCOPE "Magic Remote" MODE — Hybrid Axis
+//
+// X-axis (Left/Right): DeviceMotionEvent (Velocity) - Snappy, no compass lock
+// Y-axis (Up/Down): DeviceOrientationEvent (Tilt) - Smooth vertical aiming
+// ============================================
+var gyroActive = false, gyroPermGranted = false;
+var gyroOrientationListener = null;
+var gyroWS = null;
+var gyroSleepTimer = null;
+var gyroBound = false;
+var gyroRAF = null;
+
+// --- Tuning knobs ---
+var GYRO_SENS_X = 40.0;    // Angle delta sensitivity for X (deg -> px)
+var GYRO_SENS_Y = 25.0;    // Angle delta sensitivity for Y (deg -> px)
+var GYRO_DEADZONE_X = 0.0; // deg below which X is zeroed (0 = no deadzone)
+var GYRO_DEADZONE_Y = 0.0; // deg below which Y is zeroed (0 = no deadzone)
+var GYRO_EMA_ALPHA = 0.6;  // Smoothing factor (higher = less smooth, more responsive)
+var GYRO_SLEEP_MS = 4000;
+var GYRO_INVERT_X = false;
+var GYRO_INVERT_Y = false;
+
+// Internal state
+var gyroRawDX = 0, gyroRawDY = 0;
+var gyroSmoothedDX = 0, gyroSmoothedDY = 0;
+var gyroLastBeta = null; // Baseline for Y-axis tilt
+var gyroLastAlpha = null; // Baseline for X-axis tilt
+var gyroDebugCount = 0;
+
+function sleepGyro() {
+    gyroActive = false;
+    clearTimeout(gyroSleepTimer);
+    gyroSleepTimer = null;
+    gyroLastBeta = null; // Reset baseline so it doesn't jump on next wake
+    gyroLastAlpha = null;
+    var trigger = document.getElementById('gyroTrigger');
+    var dot = document.getElementById('gyroDot');
+    var status = document.getElementById('gyroStatus');
+    if (trigger) { trigger.classList.remove('awake'); trigger.classList.add('sleeping'); trigger.textContent = '\u{1F3AF} TAP TO WAKE'; }
+    if (dot) dot.classList.remove('active');
+    if (status) status.textContent = 'Gyro: sleeping \u2022 Tap to wake';
+    haptic(30);
+}
+
+function resetGyroSleep() {
+    clearTimeout(gyroSleepTimer);
+    gyroSleepTimer = setTimeout(sleepGyro, GYRO_SLEEP_MS);
+}
+
+function stopGyro() {
+    gyroActive = false;
+    clearTimeout(gyroSleepTimer);
+    gyroSleepTimer = null;
+    gyroBound = false;
+    gyroLastBeta = null;
+    gyroLastAlpha = null;
+    if (gyroOrientationListener) { window.removeEventListener('deviceorientation', gyroOrientationListener); gyroOrientationListener = null; }
+    if (gyroRAF) { cancelAnimationFrame(gyroRAF); gyroRAF = null; }
+    if (gyroWS) { gyroWS.close(); gyroWS = null; }
+    try { screen.orientation.unlock(); } catch(e) {}
+}
+
+function bindGyro() {
+    var area = document.getElementById('gyroArea');
+    var dot = document.getElementById('gyroDot');
+    var trigger = document.getElementById('gyroTrigger');
+    var status = document.getElementById('gyroStatus');
+    var hint = document.getElementById('gyroHint');
+    if (!trigger || !area) return;
+
+    async function requestGyroPermission() {
+        if (gyroPermGranted) return true;
+        
+        var needed = [];
+        try { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') needed.push(DeviceOrientationEvent.requestPermission()); } catch(e) {}
+        try { if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') needed.push(DeviceMotionEvent.requestPermission()); } catch(e) {}
+        
+        if (needed.length > 0) {
+            try {
+                var results = await Promise.all(needed);
+                if (results.every(function(r){ return r === 'granted'; })) { gyroPermGranted = true; return true; }
+                showToast('Sensor permission denied', true); return false;
+            } catch(e) { showToast('Sensor permission error', true); return false; }
+        }
+        gyroPermGranted = true;
+        return true;
+    }
+
+    var gyroReconnDelay = 500;
+
+    function openGyroWS() {
+        if (gyroWS) return;
+        var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        gyroWS = new WebSocket(proto + '//' + location.host + '/ws/gyro');
+        gyroWS.onopen = function() { gyroReconnDelay = 500; };
+        gyroWS.onmessage = function(ev) {
+            try {
+                var d = JSON.parse(ev.data);
+                if (d.type === 'clicked') {
+                    if (status) status.textContent = 'Gyro: clicked at ' + d.x + ', ' + d.y;
+                } else {
+                    if (status) status.textContent = 'Gyro: ' + d.x + ', ' + d.y;
+                }
+            } catch(e) {}
+        };
+        gyroWS.onerror = function() { gyroWS.close(); };
+        gyroWS.onclose = function() {
+            gyroWS = null;
+            if (gyroActive || (currentSubMode === 'gyro' && currentMode === 'remote')) {
+                setTimeout(function() {
+                    if (!gyroWS && (gyroActive || currentSubMode === 'gyro')) openGyroWS();
+                }, gyroReconnDelay);
+                gyroReconnDelay = Math.min(gyroReconnDelay * 2, 15000);
+            }
+        };
+    }
+
+    function ensureGyroListeners() {
+        if (gyroBound) return;
+        gyroBound = true;
+        gyroDebugCount = 0;
+        gyroLastBeta = null;
+        gyroLastAlpha = null;
+
+        var debugEl = document.getElementById('gyroDebug');
+        var debugData = {
+            oAlpha: 0, oBeta: 0, oGamma: 0,
+            mAlpha: 0, mBeta: 0, mGamma: 0
+        };
+        
+        function updateDebug() {
+            if (!debugEl) debugEl = document.getElementById('gyroDebug');
+            if (!debugEl) return;
+            debugEl.innerHTML = 
+                'O-Alpha: ' + debugData.oAlpha.toFixed(2) + '<br>' +
+                'O-Beta:  ' + debugData.oBeta.toFixed(2) + '<br>' +
+                'O-Gamma: ' + debugData.oGamma.toFixed(2) + '<br><br>' +
+                'M-Alpha: ' + debugData.mAlpha.toFixed(2) + '<br>' +
+                'M-Beta:  ' + debugData.mBeta.toFixed(2) + '<br>' +
+                'M-Gamma: ' + debugData.mGamma.toFixed(2);
+        }
+
+        try { screen.orientation.lock('portrait').catch(function(){}); } catch(e) {}
+
+        // --- X/Y AXES via TILT (DeviceOrientation) ---
+        gyroOrientationListener = function(e) {
+            debugData.oAlpha = e.alpha || 0;
+            debugData.oBeta = e.beta || 0;
+            debugData.oGamma = e.gamma || 0;
+            updateDebug();
+
+            if (!gyroActive || e.beta === null || e.alpha === null) {
+                if (e.beta !== null) gyroLastBeta = e.beta; // Quietly track base while asleep
+                if (e.alpha !== null) gyroLastAlpha = e.alpha;
+                return;
+            }
+
+            var beta = e.beta;
+            var alpha = e.alpha;
+            
+            if (gyroLastBeta === null) { gyroLastBeta = beta; }
+            if (gyroLastAlpha === null) { gyroLastAlpha = alpha; }
+
+            var dBeta = beta - gyroLastBeta;
+            var dAlpha = alpha - gyroLastAlpha;
+            
+            // Prevent violent snapping if math wraps around
+            if (dBeta > 180) dBeta -= 360;
+            if (dBeta < -180) dBeta += 360;
+            
+            if (dAlpha > 180) dAlpha -= 360;
+            if (dAlpha < -180) dAlpha += 360;
+            
+            gyroLastBeta = beta; // Frame-by-frame delta update
+            gyroLastAlpha = alpha;
+
+            if (Math.abs(dBeta) < GYRO_DEADZONE_Y) dBeta = 0;
+            if (Math.abs(dAlpha) < GYRO_DEADZONE_X) dAlpha = 0;
+            
+            // User mapping:
+            // LEFT: O-ALPHA increasing -> dAlpha is positive. We want cursor to move left (negative dx).
+            // UP: O-BETA increasing -> dBeta is positive. We want cursor to move up (negative dy).
+            var dx = -dAlpha * GYRO_SENS_X * (GYRO_INVERT_X ? -1 : 1);
+            var dy = -dBeta * GYRO_SENS_Y * (GYRO_INVERT_Y ? -1 : 1);
+            
+            gyroRawDX += dx;
+            gyroRawDY += dy;
+
+            gyroDebugCount++;
+            if (gyroDebugCount <= 3 && status) {
+                status.textContent = 'Gyro: Pure Tilt Active';
+            }
+        };
+        window.addEventListener('deviceorientation', gyroOrientationListener);
+
+        // Send loop: drains accumulated deltas
+        function gyroSendLoop() {
+            gyroRAF = requestAnimationFrame(gyroSendLoop);
+            if (!gyroActive) { gyroRawDX = 0; gyroRawDY = 0; return; }
+
+            // EMA smooth
+            gyroSmoothedDX = gyroRawDX * GYRO_EMA_ALPHA + gyroSmoothedDX * (1 - GYRO_EMA_ALPHA);
+            gyroSmoothedDY = gyroRawDY * GYRO_EMA_ALPHA + gyroSmoothedDY * (1 - GYRO_EMA_ALPHA);
+            gyroRawDX = 0;
+            gyroRawDY = 0;
+
+            var dx = gyroSmoothedDX;
+            var dy = gyroSmoothedDY;
+
+            if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) return;
+
+            resetGyroSleep();
+
+            if (gyroWS && gyroWS.readyState === WebSocket.OPEN) {
+                gyroWS.send(JSON.stringify({ dx: dx, dy: dy }));
+            }
+        }
+        if (!gyroRAF) gyroSendLoop();
+    }
+
+    async function handleGyroTap() {
+        // Try to lock orientation and go fullscreen on user interaction
+        try { document.documentElement.requestFullscreen().catch(function(){}); } catch(e) {}
+        try { screen.orientation.lock('portrait').catch(function(){}); } catch(e) {}
+
+        if (!gyroActive) {
+            // === WAKE UP ===
+            var ok = await requestGyroPermission();
+            if (!ok) return;
+
+            gyroActive = true;
+            gyroSmoothedDX = 0; gyroSmoothedDY = 0;
+            gyroRawDX = 0; gyroRawDY = 0;
+            gyroLastBeta = null;
+            gyroLastAlpha = null;
+            gyroDebugCount = 0;
+            
+            if (dot) dot.classList.add('active');
+            if (hint) hint.style.opacity = '0';
+            trigger.classList.remove('sleeping');
+            trigger.classList.add('awake');
+            trigger.textContent = '\u{1F3AF} AIMING \u2022 TAP TO CLICK';
+            haptic(40);
+
+            resetGyroSleep();
+            openGyroWS();
+            ensureGyroListeners();
+        } else {
+            // === CLICK ===
+            haptic(10);
+            resetGyroSleep();
+
+            if (gyroWS && gyroWS.readyState === WebSocket.OPEN) {
+                gyroWS.send(JSON.stringify({ type: 'click' }));
+            } else {
+                apiPost('/api/cursor/click').then(function(d) {
+                    if (d && status) status.textContent = 'Gyro: clicked at ' + Math.round(d.x) + ', ' + Math.round(d.y);
+                }).catch(function(){});
+            }
+        }
+    }
+
+    trigger.addEventListener('click', function(e) {
+        e.preventDefault();
+        handleGyroTap();
+    });
+
+    area.addEventListener('touchstart', function(e) { e.preventDefault(); }, { passive: false });
+    area.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        handleGyroTap();
+    }, { passive: false });
+
+    // --- Scroll buttons (4-directional hold-to-scroll) ---
+    var scrollBtnsContainer = document.getElementById('gyroScrollBtns');
+    if (scrollBtnsContainer) {
+        var SCROLL_BTN_SPEED = 120; // px per tick
+        var SCROLL_BTN_INTERVAL = 50; // ms between ticks
+        var scrollBtnTimer = null;
+
+        function startScrolling(dir, btnEl) {
+            stopScrolling();
+            if (btnEl) btnEl.classList.add('active');
+            var dxMap = { up: 0, down: 0, left: -SCROLL_BTN_SPEED, right: SCROLL_BTN_SPEED };
+            var dyMap = { up: -SCROLL_BTN_SPEED, down: SCROLL_BTN_SPEED, left: 0, right: 0 };
+            var dx = dxMap[dir] || 0, dy = dyMap[dir] || 0;
+            function tick() {
+                if (gyroWS && gyroWS.readyState === WebSocket.OPEN) {
+                    gyroWS.send(JSON.stringify({ type: 'scroll', deltaX: dx, deltaY: dy }));
+                }
+                if (gyroActive) resetGyroSleep();
+            }
+            tick(); // immediate first tick
+            scrollBtnTimer = setInterval(tick, SCROLL_BTN_INTERVAL);
+            haptic(15);
+        }
+
+        function stopScrolling() {
+            if (scrollBtnTimer) { clearInterval(scrollBtnTimer); scrollBtnTimer = null; }
+            scrollBtnsContainer.querySelectorAll('.gyro-scroll-btn').forEach(function(b) { b.classList.remove('active'); });
+        }
+
+        scrollBtnsContainer.querySelectorAll('.gyro-scroll-btn').forEach(function(btn) {
+            var dir = btn.dataset.scroll;
+
+            btn.addEventListener('touchstart', function(e) {
+                e.preventDefault(); e.stopPropagation();
+                startScrolling(dir, btn);
+            }, { passive: false });
+
+            btn.addEventListener('touchend', function(e) {
+                e.preventDefault(); e.stopPropagation();
+                stopScrolling();
+            }, { passive: false });
+
+            btn.addEventListener('touchcancel', function(e) {
+                e.preventDefault();
+                stopScrolling();
+            }, { passive: false });
+
+            // Desktop mouse support
+            btn.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                startScrolling(dir, btn);
+            });
+            btn.addEventListener('mouseup', function(e) { stopScrolling(); });
+            btn.addEventListener('mouseleave', function(e) { stopScrolling(); });
+        });
+    }
+}
+
+// ============================================
+// SITES
+// ============================================
+var SITE_ICONS = { youtube: '\uD83D\uDCFA', netflix: '\uD83C\uDFAC', oneplay: '\uD83C\uDFAE' };
+
+async function loadSites() {
+    try {
+        var data = await apiGet('/api/sites');
+        var status = await apiGet('/api/status');
+        var container = document.getElementById('siteCards');
+        if (!container) return;
+        container.innerHTML = '';
+        for (var key in data.sites) {
+            var url = data.sites[key];
+            var card = document.createElement('div');
+            card.className = 'site-card';
+            try { var h = new URL(url).hostname.replace('www.', ''); if (status.url && status.url.indexOf(h) !== -1) card.classList.add('active-site'); } catch(e) {}
+            card.innerHTML = '<span class="site-icon">' + (SITE_ICONS[key] || '\uD83C\uDF10') + '</span><div class="site-info"><div class="site-name">' + key.charAt(0).toUpperCase() + key.slice(1) + '</div><div class="site-url">' + url + '</div></div>';
+            card.onclick = (function(k) { return function() { switchSite(k); }; })(key);
+            container.appendChild(card);
+        }
+    } catch(e) {}
+}
+async function switchSite(key) {
+    haptic(20);
+    try { await apiPost('/api/navigate', { url: key }); showToast('Switched to ' + key); checkStatus(); } catch(e) {}
+}
+async function goUrl() {
+    haptic(20);
+    var inp = document.getElementById('navUrl');
+    var url = inp.value.trim();
+    if (!url) return;
+    if (url.indexOf('http') !== 0) url = 'https://' + url;
+    try { await apiPost('/api/navigate', { url: url }); showToast('Navigating...'); inp.value = ''; } catch(e) {}
+}
+document.getElementById('navUrl').addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); goUrl(); } });
+
+// ============================================
+// TABS
+// ============================================
+async function loadTabs() {
+    try {
+        var data = await apiGet('/api/tabs');
+        var container = document.getElementById('tabsList');
+        if (!container) return;
+        container.innerHTML = '';
+        if (!data.tabs.length) { container.innerHTML = '<p style="color:var(--dim);text-align:center;padding:16px">No tabs</p>'; return; }
+        data.tabs.forEach(function(tab) {
+            var card = document.createElement('div');
+            card.className = 'tab-card' + (tab.active ? ' active-tab' : '');
+            card.innerHTML = '<div class="tab-title">' + (tab.title || 'Untitled') + '</div><div class="tab-url">' + tab.url + '</div>';
+            card.onclick = function() { switchTab(tab.index); };
+            container.appendChild(card);
+        });
+    } catch(e) {}
+}
+async function switchTab(i) {
+    haptic(20);
+    try { var d = await apiPost('/api/tabs/' + i); showToast('Tab: ' + d.title); checkStatus(); loadTabs(); } catch(e) {}
+}
+
+// ============================================
+// CONNECTION / STATUS
+// ============================================
+async function doConnect() {
+    haptic(30);
+    try { await apiPost('/api/connect'); showToast('Connected!'); checkStatus(); if (currentMode === 'mirror') startMirror(); } catch(e) {}
+}
+async function doReload() {
+    haptic(30);
+    try { await apiPost('/api/reload'); showToast('Reloading...'); setTimeout(checkStatus, 1500); } catch(e) {}
+}
+async function checkStatus() {
+    try {
+        var d = await apiGet('/api/status');
+        document.getElementById('dot').classList.toggle('on', d.connected);
+        document.getElementById('titleText').textContent = d.connected ? (d.title || d.url || 'Connected').substring(0, 50) : 'Disconnected';
+
+        // Standby detection
+        var overlay = document.getElementById('standbyOverlay');
+        if (overlay) {
+            if (!d.connected && !d.browser_alive) {
+                overlay.classList.add('active');
+            } else {
+                overlay.classList.remove('active');
+                var btn = document.getElementById('standbyStartBtn');
+                if (btn) btn.textContent = '▶ Tap to Start';
+            }
+        }
+
+        // PC mode sync
+        if (d.pc_mode !== undefined) {
+            var wasPcMode = document.body.classList.contains('pc-mode');
+            document.body.classList.toggle('pc-mode', d.pc_mode);
+            var toggle = document.getElementById('modeToggle');
+            if (toggle) {
+                toggle.textContent = d.pc_mode ? '⚠️ PC Mode' : '🖥️ Browser';
+                toggle.classList.toggle('pc-active', d.pc_mode);
+            }
+            if (wasPcMode !== d.pc_mode) {
+                refreshMirrorForMode();
+                if (typeof refreshGyroForMode === 'function') refreshGyroForMode();
+            }
+            // Sync monitor picker & active monitor from status
+            if (d.pc_mode && d.monitors) {
+                currentMonitors = d.monitors;
+                if (d.pc_monitor !== undefined) activeMonitorIdx = d.pc_monitor;
+                renderMonitorPicker();
+            }
+        }
+    } catch(e) {
+        document.getElementById('dot').classList.remove('on');
+        document.getElementById('titleText').textContent = 'Server unreachable';
+    }
+}
+
+async function startBrowser() {
+    haptic(40);
+    var btn = document.getElementById('standbyStartBtn');
+    if (btn) btn.textContent = '⏳ Starting...';
+    try {
+        await apiPost('/api/start');
+        showToast('Browser starting...');
+        setTimeout(checkStatus, 3000);
+    } catch(e) {
+        showToast('Failed to start browser', true);
+        if (btn) btn.textContent = '▶ Tap to Start';
+    }
+}
+
+var currentMonitors = [];
+var activeMonitorIdx = 0;
+
+async function togglePcMode() {
+    haptic(25);
+    var current = document.body.classList.contains('pc-mode');
+    try {
+        var d = await apiPost('/api/mode', { mode: current ? 'browser' : 'pc' });
+        document.body.classList.toggle('pc-mode', d.mode === 'pc');
+        var toggle = document.getElementById('modeToggle');
+        if (toggle) {
+            toggle.textContent = d.mode === 'pc' ? '⚠️ PC Mode' : '🖥️ Browser';
+            toggle.classList.toggle('pc-active', d.mode === 'pc');
+        }
+        showToast(d.mode === 'pc' ? 'PC Mode: Controls real cursor!' : 'Browser Mode');
+        refreshMirrorForMode();
+        if (typeof refreshGyroForMode === 'function') refreshGyroForMode();
+        if (d.mode === 'pc') loadMonitors();
+    } catch(e) {
+        showToast('Failed to toggle mode', true);
+    }
+}
+
+async function loadMonitors() {
+    try {
+        var d = await (await fetch('/api/monitors')).json();
+        currentMonitors = d.monitors || [];
+        activeMonitorIdx = d.active || 0;
+        renderMonitorPicker();
+    } catch(e) { console.warn('Failed to load monitors', e); }
+}
+
+function renderMonitorPicker() {
+    var picker = document.getElementById('monitorPicker');
+    if (!picker) return;
+    picker.innerHTML = '<span class="monitor-picker-label">Monitor:</span>';
+    currentMonitors.forEach(function(m, i) {
+        var btn = document.createElement('button');
+        btn.className = 'mon-btn' + (i === activeMonitorIdx ? ' active' : '');
+        btn.textContent = 'Display ' + (i + 1) + ' (' + m.width + 'x' + m.height + ')';
+        btn.onclick = function() { switchMonitor(i); };
+        picker.appendChild(btn);
+    });
+}
+
+async function switchMonitor(idx) {
+    if (idx === activeMonitorIdx) return;
+    haptic(25);
+    try {
+        await apiPost('/api/pc-monitor', { monitor: idx });
+        activeMonitorIdx = idx;
+        renderMonitorPicker();
+        showToast('Switched to Display ' + (idx + 1));
+        // Reconnect mirror to get the new monitor's frames
+        stopMirror();
+        setTimeout(startMirror, 200);
+        if (typeof refreshGyroForMode === 'function') refreshGyroForMode();
+    } catch(e) {
+        showToast('Failed to switch monitor', true);
+    }
+}
+
+// ============================================
+// TOAST
+// ============================================
+var toastTimer = null;
+function showToast(msg, err) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (err ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.className = 'toast'; }, 2000);
+}
+
+// ============================================
+// KEYBOARD (desktop)
+// ============================================
+document.addEventListener('keydown', function(e) {
+    var act = document.activeElement;
+    if (act && (act.tagName === 'INPUT' || act.tagName === 'TEXTAREA')) return;
+    var map = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right', Enter:'enter', Escape:'back', ' ':'playpause' };
+    if (map[e.key]) { e.preventDefault(); press(map[e.key]); }
+});
+
+// ============================================
+// INIT
+// ============================================
+checkStatus();
+setInterval(checkStatus, 5000);
+startMirror();
+renderSubMode();
+
+var lastTE = 0;
+document.addEventListener('touchend', function(e) {
+    var now = Date.now();
+    if (now - lastTE <= 300) e.preventDefault();
+    lastTE = now;
+}, false);
+</script>
+</body>
+</html>
