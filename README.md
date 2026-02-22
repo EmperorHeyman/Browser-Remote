@@ -242,7 +242,6 @@ Shown after the server starts:
 | Issue | Details |
 |---|---|
 | **Switching monitors in PC mode is rough** | When switching the active monitor, the mirror WebSocket disconnects and reconnects. There can be a brief black frame or stutter during the transition. The monitor picker UI works but the switchover isn't seamless. |
-| **Gyro has no way to scroll** | The gyro "Magic Remote" mode can aim and click, but there's currently no gesture or button to scroll while in gyro mode. You have to switch to mirror (swipe to scroll) or trackpad (two-finger scroll) to scroll the page. |
 | **Self-signed cert warning** | On first connect, phones show a "Not Secure" warning for the self-signed SSL certificate. You have to manually accept it once. Some browsers (especially Safari) may require navigating to the URL directly and accepting the cert before WebSocket connections work. |
 | **Single PC only** | The server uses `ctypes.windll` for mouse control and `mss` for desktop capture — Windows only. No Linux/macOS support. |
 
@@ -288,9 +287,6 @@ Select your browser, monitor, and click **Start**. The launcher will:
 # Option 1: PowerShell script
 .\start.ps1
 
-# Option 2: Batch file
-start.bat
-
 # Option 3: Manual
 # 1. Start browser with CDP
 "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" `
@@ -323,10 +319,8 @@ RemoteProjector/
 ├── static/
 │   └── index.html          # Mobile-first web frontend (single file, ~1500 lines)
 ├── start.ps1               # PowerShell one-click launcher
-├── start.bat               # Batch one-click launcher
 ├── requirements.txt        # Python dependencies
-├── idea.md                 # Development notes & changelog
-└── about.md                # This file
+└── READNE.md                # This file
 ```
 
 ## Configuration
