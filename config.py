@@ -30,6 +30,12 @@ _DEFAULTS = {
         "netflix": "https://www.netflix.com/browse",
         "oneplay": "https://www.oneplay.cz",
     },
+    "cursor_hide_delay": 2.0,
+    "cursor_sensitivity": 1.0,
+    "scroll_speed": 1.0,
+    "startup_urls": [],
+    "favorites": [],
+    "language": "en",
 }
 
 
@@ -62,6 +68,8 @@ def _reload():
     """Reload from disk and update module-level variables."""
     global BRAVE_PATH, CDP_PORT, USER_DATA_DIR, HOST, PORT
     global PROJECTOR_MONITOR, MONITORS, DEFAULT_URL, SITES
+    global CURSOR_HIDE_DELAY, CURSOR_SENSITIVITY, SCROLL_SPEED
+    global STARTUP_URLS, FAVORITES, LANGUAGE
     cfg = load()
     BRAVE_PATH = cfg["brave_path"]
     CDP_PORT = cfg["cdp_port"]
@@ -72,6 +80,12 @@ def _reload():
     MONITORS = cfg["monitors"]
     DEFAULT_URL = cfg["default_url"]
     SITES = cfg["sites"]
+    CURSOR_HIDE_DELAY = cfg["cursor_hide_delay"]
+    CURSOR_SENSITIVITY = cfg["cursor_sensitivity"]
+    SCROLL_SPEED = cfg["scroll_speed"]
+    STARTUP_URLS = cfg["startup_urls"]
+    FAVORITES = cfg["favorites"]
+    LANGUAGE = cfg["language"]
 
 
 _reload()

@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QComboBox, QSpinBox, QLineEdit, QGroupBox,
     QTextEdit, QFormLayout, QMessageBox, QSystemTrayIcon, QMenu,
     QFrame, QSplitter, QStackedWidget, QSpacerItem, QSizePolicy,
-    QCheckBox,
+    QCheckBox, QFileDialog, QDoubleSpinBox, QDialog, QScrollArea,
 )
 
 import config  # our %appdata% config module
@@ -115,6 +115,56 @@ def _ensure_qrcode():
         _sp.check_call([sys.executable, "-m", "pip", "install", "--quiet", "qrcode[pil]"])
 
 _ensure_qrcode()
+
+# ---------------------------------------------------------------------------
+# Simple i18n
+# ---------------------------------------------------------------------------
+TRANSLATIONS = {
+    "en": {
+        "title": "browser remote",
+        "subtitle": "Control your projector browser from your phone",
+        "browser": "Browser", "path": "Path", "profile": "Profile",
+        "url": "URL", "cdp_port": "CDP Port", "server_port": "Server Port",
+        "browser_display": "Browser Display", "identify": "Identify",
+        "server_only": "Server only (don't launch browser)",
+        "autostart": "Start with Windows",
+        "minimize_tray": "Minimize to tray on start",
+        "start_server": "Start Server", "stop_server": "Stop Server",
+        "show_logs": "Show Logs", "hide_logs": "Hide Logs",
+        "export_logs": "Export", "server_running": "Server Running",
+        "advanced": "Advanced Settings",
+        "cursor_delay": "Cursor Hide Delay (s)",
+        "cursor_sens": "Cursor Sensitivity",
+        "scroll_speed": "Scroll Speed",
+        "startup_urls": "Startup URLs (one per line)",
+        "import_cfg": "Import Config", "export_cfg": "Export Config",
+        "welcome": "Welcome! Configure your browser and settings, then click Start.",
+    },
+    "cs": {
+        "title": "browser remote",
+        "subtitle": "Ovládejte prohlížeč projektoru z telefonu",
+        "browser": "Prohlížeč", "path": "Cesta", "profile": "Profil",
+        "url": "URL", "cdp_port": "CDP Port", "server_port": "Port serveru",
+        "browser_display": "Displej prohlížeče", "identify": "Identifikovat",
+        "server_only": "Pouze server (nespouštět prohlížeč)",
+        "autostart": "Spustit s Windows",
+        "minimize_tray": "Minimalizovat do lišty",
+        "start_server": "Spustit server", "stop_server": "Zastavit server",
+        "show_logs": "Zobrazit logy", "hide_logs": "Skrýt logy",
+        "export_logs": "Export", "server_running": "Server běží",
+        "advanced": "Pokročilé nastavení",
+        "cursor_delay": "Prodleva skrytí kurzoru (s)",
+        "cursor_sens": "Citlivost kurzoru",
+        "scroll_speed": "Rychlost posuvu",
+        "startup_urls": "URL při startu (jedno na řádek)",
+        "import_cfg": "Importovat nastavení", "export_cfg": "Exportovat nastavení",
+        "welcome": "Vítejte! Nastavte prohlížeč a klikněte na Start.",
+    },
+}
+
+def _t(key: str) -> str:
+    lang = config.load().get("language", "en")
+    return TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, TRANSLATIONS["en"].get(key, key))
 
 
 def _base_dir() -> str:
@@ -243,14 +293,61 @@ def generate_qr_pixmap(data_str: str, size: int = 180) -> QPixmap:
 
 
 # ---------------------------------------------------------------------------
+# Monitor Identification Overlays
+# ---------------------------------------------------------------------------
+class MonitorOverlay(QWidget):
+    """Temporary fullscreen overlay showing a monitor number."""
+
+    def __init__(self, monitor_index: int, geometry: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.monitor_index = monitor_index
+        self.setGeometry(
+            geometry["left"], geometry["top"],
+            geometry["width"], geometry["height"],
+        )
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # Semi-transparent dark background
+        painter.fillRect(self.rect(), QColor(10, 10, 10, 180))
+        # Large circle in center
+        cx, cy = self.width() // 2, self.height() // 2
+        radius = min(self.width(), self.height()) // 5
+        painter.setBrush(QColor("#e94560"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(cx - radius, cy - radius, radius * 2, radius * 2)
+        # Monitor number
+        font = QFont("Segoe UI", radius)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QColor("#ffffff"))
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, str(self.monitor_index))
+        # Label below
+        small_font = QFont("Segoe UI", max(16, radius // 4))
+        painter.setFont(small_font)
+        painter.setPen(QColor("#4ecca3"))
+        label_rect = self.rect().adjusted(0, radius + 20, 0, 0)
+        painter.drawText(label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                         f"Monitor {self.monitor_index}")
+        painter.end()
+
+
+# ---------------------------------------------------------------------------
 # Main Window
 # ---------------------------------------------------------------------------
 class LauncherWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("browser remote")
-        self.setMinimumSize(640, 580)
-        self.resize(700, 700)
+        self.setMinimumSize(640, 700)
+        self.resize(720, 860)
 
         self.settings = QSettings("ProjectorRemote", "Launcher")
         self.browsers = find_installed_browsers()
@@ -283,6 +380,23 @@ class LauncherWindow(QMainWindow):
         show_act.triggered.connect(self._show_from_tray)
         tray_menu.addAction(show_act)
         tray_menu.addSeparator()
+
+        # Quick-launch sites submenu
+        sites_menu = QMenu("Quick Launch", tray_menu)
+        cfg = config.load()
+        for name, url in cfg.get("sites", {}).items():
+            act = QAction(name.capitalize(), self)
+            act.setData(url)
+            act.triggered.connect(lambda checked, u=url: self._tray_open_site(u))
+            sites_menu.addAction(act)
+        if cfg.get("favorites"):
+            sites_menu.addSeparator()
+            for fav in cfg.get("favorites", []):
+                act = QAction(fav.get("name", fav.get("url", "")), self)
+                act.triggered.connect(lambda checked, u=fav["url"]: self._tray_open_site(u))
+                sites_menu.addAction(act)
+        tray_menu.addMenu(sites_menu)
+
         restart_act = QAction("Restart Browser", self)
         restart_act.triggered.connect(self._restart_browser)
         tray_menu.addAction(restart_act)
@@ -353,13 +467,13 @@ class LauncherWindow(QMainWindow):
         # --- 1. Header ---
         header_widget = QWidget()
         header_layout = QVBoxLayout(header_widget)
-        header_layout.setContentsMargins(20, 24, 20, 16)
-        header_layout.setSpacing(4)
+        header_layout.setContentsMargins(20, 16, 20, 10)
+        header_layout.setSpacing(2)
         
         title = QLabel("browser remote")
         title.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color: #ffffff;")
+        title.setStyleSheet("color: #e94560;")
         header_layout.addWidget(title)
 
         subtitle = QLabel("Control your projector browser from your phone")
@@ -374,16 +488,25 @@ class LauncherWindow(QMainWindow):
         self.stack = QStackedWidget()
         main_layout.addWidget(self.stack, 1) # stretch=1
 
-        # Page 1: Setup State
+        # Page 1: Setup State (scrollable)
         self.page_setup = QWidget()
-        setup_layout = QVBoxLayout(self.page_setup)
+        setup_outer_layout = QVBoxLayout(self.page_setup)
+        setup_outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        setup_scroll = QScrollArea()
+        setup_scroll.setWidgetResizable(True)
+        setup_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        setup_scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        setup_scroll_content = QWidget()
+        setup_layout = QVBoxLayout(setup_scroll_content)
         setup_layout.setContentsMargins(30, 10, 30, 20)
         
         setup_card = QFrame()
         setup_card.setObjectName("Card")
         setup_card_layout = QVBoxLayout(setup_card)
-        setup_card_layout.setContentsMargins(24, 24, 24, 24)
-        setup_card_layout.setSpacing(16)
+        setup_card_layout.setContentsMargins(24, 20, 24, 20)
+        setup_card_layout.setSpacing(12)
 
         # Helper to create labeled inputs
         def make_field(label_text, widget):
@@ -439,7 +562,28 @@ class LauncherWindow(QMainWindow):
 
         self.monitor_combo = QComboBox()
         self._populate_monitors()
-        setup_card_layout.addWidget(make_field("Browser Display", self.monitor_combo))
+
+        monitor_row = QWidget()
+        monitor_row_layout = QHBoxLayout(monitor_row)
+        monitor_row_layout.setContentsMargins(0, 0, 0, 0)
+        monitor_row_layout.setSpacing(8)
+        monitor_row_layout.addWidget(make_field("Browser Display", self.monitor_combo), 1)
+
+        self.identify_btn = QPushButton("Identify")
+        self.identify_btn.setFixedHeight(38)
+        self.identify_btn.setFixedWidth(90)
+        self.identify_btn.setObjectName("IdentifyBtn")
+        self.identify_btn.setToolTip("Show monitor numbers on each display")
+        self.identify_btn.clicked.connect(self._identify_monitors)
+        # Align button to bottom of the field
+        id_container = QWidget()
+        id_layout = QVBoxLayout(id_container)
+        id_layout.setContentsMargins(0, 0, 0, 0)
+        id_layout.addStretch()
+        id_layout.addWidget(self.identify_btn)
+        monitor_row_layout.addWidget(id_container)
+
+        setup_card_layout.addWidget(monitor_row)
 
         # --- Options row ---
         options_widget = QWidget()
@@ -463,10 +607,107 @@ class LauncherWindow(QMainWindow):
         self.autostart_check.toggled.connect(self._on_autostart_toggled)
         options_layout.addWidget(self.autostart_check)
 
+        self.minimize_tray_check = QCheckBox("Minimize to tray on start")
+        self.minimize_tray_check.setStyleSheet("color: #cccccc; font-size: 12px;")
+        self.minimize_tray_check.setToolTip(
+            "Automatically hide the window to the system tray\n"
+            "after starting the server."
+        )
+        options_layout.addWidget(self.minimize_tray_check)
+
         options_layout.addStretch()
         setup_card_layout.addWidget(options_widget)
 
-        setup_card_layout.addStretch()
+        # --- Advanced Settings (collapsible) ---
+        self.adv_toggle_btn = QPushButton("▸ Advanced Settings")
+        self.adv_toggle_btn.setObjectName("AdvToggleBtn")
+        self.adv_toggle_btn.setFixedHeight(30)
+        self.adv_toggle_btn.clicked.connect(self._toggle_advanced)
+        setup_card_layout.addWidget(self.adv_toggle_btn)
+
+        self.adv_widget = QWidget()
+        self.adv_widget.setVisible(False)
+        adv_layout = QVBoxLayout(self.adv_widget)
+        adv_layout.setContentsMargins(0, 4, 0, 0)
+        adv_layout.setSpacing(10)
+
+        adv_grid = QWidget()
+        adv_grid_layout = QHBoxLayout(adv_grid)
+        adv_grid_layout.setContentsMargins(0, 0, 0, 0)
+        adv_grid_layout.setSpacing(12)
+
+        self.cursor_delay_spin = QDoubleSpinBox()
+        self.cursor_delay_spin.setRange(0.5, 10.0)
+        self.cursor_delay_spin.setSingleStep(0.5)
+        self.cursor_delay_spin.setValue(2.0)
+        self.cursor_delay_spin.setSuffix("s")
+        adv_grid_layout.addWidget(make_field("Cursor Hide Delay", self.cursor_delay_spin))
+
+        self.cursor_sens_spin = QDoubleSpinBox()
+        self.cursor_sens_spin.setRange(0.1, 5.0)
+        self.cursor_sens_spin.setSingleStep(0.1)
+        self.cursor_sens_spin.setValue(1.0)
+        self.cursor_sens_spin.setSuffix("x")
+        adv_grid_layout.addWidget(make_field("Cursor Sensitivity", self.cursor_sens_spin))
+
+        self.scroll_speed_spin = QDoubleSpinBox()
+        self.scroll_speed_spin.setRange(0.1, 5.0)
+        self.scroll_speed_spin.setSingleStep(0.1)
+        self.scroll_speed_spin.setValue(1.0)
+        self.scroll_speed_spin.setSuffix("x")
+        adv_grid_layout.addWidget(make_field("Scroll Speed", self.scroll_speed_spin))
+
+        adv_layout.addWidget(adv_grid)
+
+        self.startup_urls_edit = QTextEdit()
+        self.startup_urls_edit.setPlaceholderText("https://example.com\nhttps://another.com")
+        self.startup_urls_edit.setFixedHeight(60)
+        self.startup_urls_edit.setStyleSheet("""
+            QTextEdit {
+                background: #0d0d1a; color: #eeeeee; border: 2px solid #1e2a4a;
+                border-radius: 8px; padding: 6px; font-size: 11px;
+            }
+        """)
+        adv_layout.addWidget(make_field("Startup URLs (one per line)", self.startup_urls_edit))
+
+        # Language selector
+        lang_row = QWidget()
+        lang_row_layout = QHBoxLayout(lang_row)
+        lang_row_layout.setContentsMargins(0, 0, 0, 0)
+        lang_row_layout.setSpacing(12)
+
+        self.language_combo = QComboBox()
+        self.language_combo.addItem("English", "en")
+        self.language_combo.addItem("Čeština", "cs")
+        lang_row_layout.addWidget(make_field("Language", self.language_combo))
+
+        # Config import/export buttons
+        ie_widget = QWidget()
+        ie_layout = QHBoxLayout(ie_widget)
+        ie_layout.setContentsMargins(0, 0, 0, 0)
+        ie_layout.setSpacing(8)
+        import_btn = QPushButton("Import Config")
+        import_btn.setFixedHeight(34)
+        import_btn.setObjectName("IdentifyBtn")
+        import_btn.clicked.connect(self._import_config)
+        ie_layout.addWidget(import_btn)
+        export_btn = QPushButton("Export Config")
+        export_btn.setFixedHeight(34)
+        export_btn.setObjectName("IdentifyBtn")
+        export_btn.clicked.connect(self._export_config)
+        ie_layout.addWidget(export_btn)
+
+        ie_container = QWidget()
+        ie_container_layout = QVBoxLayout(ie_container)
+        ie_container_layout.setContentsMargins(0, 0, 0, 0)
+        ie_container_layout.addStretch()
+        ie_container_layout.addWidget(ie_widget)
+        lang_row_layout.addWidget(ie_container)
+
+        lang_row_layout.addStretch()
+        adv_layout.addWidget(lang_row)
+
+        setup_card_layout.addWidget(self.adv_widget)
 
         self.start_btn = QPushButton("Start Server")
         self.start_btn.setFixedHeight(50)
@@ -476,6 +717,8 @@ class LauncherWindow(QMainWindow):
         setup_card_layout.addWidget(self.start_btn)
 
         setup_layout.addWidget(setup_card)
+        setup_scroll.setWidget(setup_scroll_content)
+        setup_outer_layout.addWidget(setup_scroll)
         self.stack.addWidget(self.page_setup)
 
         # Page 2: Active State
@@ -493,7 +736,10 @@ class LauncherWindow(QMainWindow):
         self.qr_label = QLabel()
         self.qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qr_label.setFixedSize(220, 220)
-        self.qr_label.setStyleSheet("background: white; border-radius: 12px; padding: 10px;")
+        self.qr_label.setStyleSheet(
+            "background: #ffffff; border-radius: 16px; padding: 10px;"
+            "border: 2px solid #1e2a4a;"
+        )
         active_card_layout.addWidget(self.qr_label, 0, Qt.AlignmentFlag.AlignHCenter)
 
         self.url_label = QLabel()
@@ -502,6 +748,14 @@ class LauncherWindow(QMainWindow):
         self.url_label.setStyleSheet("color: #4ecca3;")
         self.url_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         active_card_layout.addWidget(self.url_label)
+
+        # Dashboard info
+        self.dashboard_label = QLabel("")
+        self.dashboard_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.dashboard_label.setFont(QFont("Segoe UI", 10))
+        self.dashboard_label.setStyleSheet("color: #888888;")
+        self.dashboard_label.setWordWrap(True)
+        active_card_layout.addWidget(self.dashboard_label)
 
         active_card_layout.addStretch()
 
@@ -541,6 +795,13 @@ class LauncherWindow(QMainWindow):
         self.log_toggle_btn.setObjectName("LogToggleBtn")
         self.log_toggle_btn.clicked.connect(self._toggle_logs)
         toggle_layout.addWidget(self.log_toggle_btn)
+
+        self.log_export_btn = QPushButton("Export")
+        self.log_export_btn.setFixedSize(70, 28)
+        self.log_export_btn.setObjectName("LogToggleBtn")
+        self.log_export_btn.clicked.connect(self._export_logs)
+        toggle_layout.addWidget(self.log_export_btn)
+
         toggle_layout.addStretch()
         drawer_layout.addLayout(toggle_layout)
 
@@ -562,44 +823,69 @@ class LauncherWindow(QMainWindow):
         self._update_qr()
         self.server_port_spin.valueChanged.connect(self._update_qr)
 
-        # Styling
+        # Styling — matched to web app theme vars
         self.setStyleSheet("""
-            QMainWindow { background: #121212; }
+            QMainWindow { background: #0a0a0a; }
             QFrame#Card {
-                background: #1e1e2e;
+                background: #161625;
+                border: 1px solid #1e2a4a;
                 border-radius: 16px;
             }
             QComboBox, QSpinBox, QLineEdit {
-                background: #0a0a0a; color: #eeeeee; border: 2px solid transparent;
+                background: #0d0d1a; color: #eeeeee; border: 2px solid #1e2a4a;
                 border-radius: 8px; padding: 8px 12px; font-size: 12px;
             }
             QComboBox:focus, QSpinBox:focus, QLineEdit:focus {
-                border: 2px solid #4ecca3;
+                border: 2px solid #e94560;
             }
             QComboBox::drop-down { border: none; width: 24px; }
             QComboBox QAbstractItemView {
-                background: #1e1e2e; color: #eeeeee; selection-background-color: #4ecca3;
-                border-radius: 8px;
+                background: #161625; color: #eeeeee; selection-background-color: #e94560;
+                border: 1px solid #1e2a4a; border-radius: 8px;
+            }
+            QCheckBox { color: #cccccc; font-size: 12px; }
+            QCheckBox::indicator {
+                width: 16px; height: 16px; border-radius: 4px;
+                border: 2px solid #1e2a4a; background: #0d0d1a;
+            }
+            QCheckBox::indicator:checked {
+                background: #e94560; border-color: #e94560;
             }
             QPushButton#StartBtn {
-                background: #4ecca3; color: #0a0a0a; border: none;
-                border-radius: 12px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #e94560, stop:1 #d63050);
+                color: #ffffff; border: none; border-radius: 12px;
             }
-            QPushButton#StartBtn:hover { background: #3dbb92; }
-            QPushButton#StartBtn:pressed { background: #2eaa81; }
-            
+            QPushButton#StartBtn:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #ff5670, stop:1 #e94560);
+            }
+            QPushButton#StartBtn:pressed {
+                background: #c72340;
+            }
             QPushButton#StopBtn {
                 background: #e94560; color: white; border: none;
                 border-radius: 8px;
             }
-            QPushButton#StopBtn:hover { background: #d83450; }
+            QPushButton#StopBtn:hover { background: #ff5670; }
             QPushButton#StopBtn:pressed { background: #c72340; }
-
+            QPushButton#IdentifyBtn {
+                background: #0f3460; color: #eee; border: none;
+                border-radius: 8px; font-size: 11px; font-weight: bold;
+            }
+            QPushButton#IdentifyBtn:hover { background: #1a4a80; }
+            QPushButton#IdentifyBtn:pressed { background: #0a2540; }
             QPushButton#LogToggleBtn {
-                background: #2a2a3a; color: #aaaaaa; border: none;
+                background: #161625; color: #888888; border: 1px solid #1e2a4a;
                 border-radius: 14px; font-size: 11px; font-weight: bold;
             }
-            QPushButton#LogToggleBtn:hover { background: #3a3a4a; color: #ffffff; }
+            QPushButton#LogToggleBtn:hover { background: #1e2a4a; color: #ffffff; }
+            QPushButton#AdvToggleBtn {
+                background: none; color: #888888; border: none;
+                text-align: left; font-size: 12px; font-weight: bold;
+                padding: 4px 0;
+            }
+            QPushButton#AdvToggleBtn:hover { color: #e94560; }
         """)
 
     def _toggle_logs(self):
@@ -609,6 +895,71 @@ class LauncherWindow(QMainWindow):
         else:
             self.log_area.setFixedHeight(0)
             self.log_toggle_btn.setText("Show Logs")
+
+    def _toggle_advanced(self):
+        vis = not self.adv_widget.isVisible()
+        self.adv_widget.setVisible(vis)
+        self.adv_toggle_btn.setText(("▾ " if vis else "▸ ") + "Advanced Settings")
+
+    def _export_logs(self):
+        text = self.log_area.toPlainText()
+        if not text.strip():
+            self._log("No logs to export.", "#e94560")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Logs", "browser_remote_logs.txt", "Text Files (*.txt)")
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text)
+                self._log(f"Logs exported to {path}", "#4ecca3")
+            except Exception as e:
+                self._log(f"Export failed: {e}", "#e94560")
+
+    def _import_config(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Config", "", "JSON Files (*.json)")
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("Invalid config format")
+            config.save(data)
+            self._load_settings()
+            self._log(f"Config imported from {path}", "#4ecca3")
+        except Exception as e:
+            self._log(f"Import failed: {e}", "#e94560")
+
+    def _export_config(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Config", "browser_remote_config.json", "JSON Files (*.json)")
+        if not path:
+            return
+        try:
+            cfg = config.load()
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2)
+            self._log(f"Config exported to {path}", "#4ecca3")
+        except Exception as e:
+            self._log(f"Export failed: {e}", "#e94560")
+
+    def _tray_open_site(self, url: str):
+        """Open a URL via the server's navigate API."""
+        if not self.running:
+            return
+        import urllib.request
+        port = self.server_port_spin.value()
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/navigate", method="POST",
+                headers={"Content-Type": "application/json"},
+                data=json.dumps({"url": url}).encode(),
+            )
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
 
     def _has_ssl(self):
         key, cert = _find_ssl_files()
@@ -631,6 +982,23 @@ class LauncherWindow(QMainWindow):
                 self.monitor_combo.addItem(label, i)
         else:
             self.monitor_combo.addItem("Default (primary)", -1)
+
+    def _identify_monitors(self):
+        """Show numbered overlays on each monitor for 3 seconds."""
+        if not self.monitors:
+            self._log("No monitors detected.", "#e94560")
+            return
+        self._overlays = []
+        for i, m in enumerate(self.monitors):
+            overlay = MonitorOverlay(i, m)
+            overlay.show()
+            self._overlays.append(overlay)
+        QTimer.singleShot(3000, self._close_overlays)
+
+    def _close_overlays(self):
+        for overlay in getattr(self, '_overlays', []):
+            overlay.close()
+        self._overlays = []
 
     def _on_browser_changed(self, idx):
         name = self.browser_combo.currentText()
@@ -671,11 +1039,26 @@ class LauncherWindow(QMainWindow):
 
         self.server_only_check.setChecked(cfg.get("no_browser", False))
         self.autostart_check.setChecked(_is_autostart_enabled())
+        self.minimize_tray_check.setChecked(
+            self.settings.value("minimize_to_tray", False, type=bool)
+        )
+
+        # Advanced settings
+        self.cursor_delay_spin.setValue(cfg.get("cursor_hide_delay", 2.0))
+        self.cursor_sens_spin.setValue(cfg.get("cursor_sensitivity", 1.0))
+        self.scroll_speed_spin.setValue(cfg.get("scroll_speed", 1.0))
+        urls = cfg.get("startup_urls", [])
+        self.startup_urls_edit.setPlainText("\n".join(urls) if urls else "")
+        lang = cfg.get("language", "en")
+        lang_idx = self.language_combo.findData(lang)
+        if lang_idx >= 0:
+            self.language_combo.setCurrentIndex(lang_idx)
 
     def _save_settings(self):
         """Save to both QSettings (launcher prefs) and config.json (app config)."""
         self.settings.setValue("browser", self.browser_combo.currentText())
         self.settings.setValue("profile", self.profile_combo.currentIndex())
+        self.settings.setValue("minimize_to_tray", self.minimize_tray_check.isChecked())
 
         browser_name = self.browser_combo.currentText()
         browser_path = self.browser_path_edit.text().strip()
@@ -703,12 +1086,62 @@ class LauncherWindow(QMainWindow):
             "monitors": monitors_dict,
             "default_url": self.default_url_edit.text().strip() or "https://www.youtube.com/tv",
             "no_browser": self.server_only_check.isChecked(),
+            "cursor_hide_delay": self.cursor_delay_spin.value(),
+            "cursor_sensitivity": self.cursor_sens_spin.value(),
+            "scroll_speed": self.scroll_speed_spin.value(),
+            "startup_urls": [u.strip() for u in self.startup_urls_edit.toPlainText().split("\n") if u.strip()],
+            "language": self.language_combo.currentData() or "en",
         })
 
     def _show_first_launch(self):
-        self._log("Welcome! Configure your browser and settings, then click Start.", "#4ecca3")
-        self._log(f"Config will be saved to: {config.CONFIG_PATH}", "#888")
-        self._log("Tip: Use 'Default' profile to keep your logins & cookies.", "#888")
+        """Show a first-run wizard dialog."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Welcome — browser remote")
+        dlg.setFixedSize(480, 360)
+        dlg.setStyleSheet("QDialog { background: #0a0a0a; }")
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(32, 32, 32, 24)
+        layout.setSpacing(16)
+
+        title = QLabel("👋 Welcome to browser remote!")
+        title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        title.setStyleSheet("color: #e94560;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        steps = [
+            "1. Select your browser above (Brave / Chrome / Edge)",
+            "2. Pick which monitor the browser should appear on",
+            "3. Click 'Start Server' to launch",
+            "4. Scan the QR code with your phone to connect",
+            "5. Explore Advanced Settings for sensitivity, WOL, and more",
+        ]
+        for step in steps:
+            lbl = QLabel(step)
+            lbl.setFont(QFont("Segoe UI", 11))
+            lbl.setStyleSheet("color: #cccccc;")
+            layout.addWidget(lbl)
+
+        layout.addStretch()
+
+        tip = QLabel(f"Config saved to: {config.CONFIG_PATH}")
+        tip.setFont(QFont("Segoe UI", 9))
+        tip.setStyleSheet("color: #555;")
+        tip.setWordWrap(True)
+        layout.addWidget(tip)
+
+        ok_btn = QPushButton("Got it!")
+        ok_btn.setFixedHeight(40)
+        ok_btn.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        ok_btn.setStyleSheet(
+            "QPushButton { background: #e94560; color: white; border: none; border-radius: 8px; }"
+            "QPushButton:hover { background: #ff5670; }"
+        )
+        ok_btn.clicked.connect(dlg.accept)
+        layout.addWidget(ok_btn)
+
+        dlg.exec()
 
     def _log(self, msg: str, color: str = "#aaa"):
         self.log_area.append(f'<span style="color:{color}">{msg}</span>')
@@ -787,6 +1220,10 @@ class LauncherWindow(QMainWindow):
         self._update_status_label("Starting...", "#e9a045")
         self._update_qr()
 
+        # Auto-minimize to tray if configured
+        if self.minimize_tray_check.isChecked():
+            QTimer.singleShot(1500, self._hide_to_tray)
+
         # Window stays visible so user can see QR / IP
 
     def _hide_to_tray(self):
@@ -844,11 +1281,33 @@ class LauncherWindow(QMainWindow):
             scheme = "https" if self._has_ssl() else "http"
             self._update_status_label(f"Running  |  {scheme}://{ip}:{port}", "#4ecca3")
             self.tray_icon.setToolTip(f"browser remote — {scheme}://{ip}:{port}")
+            # Fetch dashboard info
+            self._fetch_dashboard(port)
         except Exception:
             if self.server_proc and self.server_proc.state() == QProcess.ProcessState.Running:
                 self._update_status_label("Starting...", "#e9a045")
             else:
                 self._update_status_label("Not responding", "#e94560")
+
+    def _fetch_dashboard(self, port: int):
+        """Fetch dashboard info from the server and update the label."""
+        import urllib.request
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/api/dashboard", method="GET")
+            resp = urllib.request.urlopen(req, timeout=2)
+            data = json.loads(resp.read().decode())
+            parts = []
+            if data.get("browser_title"):
+                parts.append(f"📺 {data['browser_title'][:40]}")
+            if data.get("server_uptime"):
+                parts.append(f"⏱ Uptime: {data['server_uptime']}")
+            if data.get("active_clients") is not None:
+                parts.append(f"📱 Clients: {data['active_clients']}")
+            mode = "PC Mode" if data.get("pc_mode") else "Browser Mode"
+            parts.append(f"🔧 {mode}")
+            self.dashboard_label.setText("  •  ".join(parts) if parts else "")
+        except Exception:
+            pass
 
     def _update_status_label(self, text, color):
         self.status_indicator.setText(f"● {text}")
@@ -900,14 +1359,14 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    # Dark palette
+    # Dark palette — matched to web app theme
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor("#161625"))
+    palette.setColor(QPalette.ColorRole.Window, QColor("#0a0a0a"))
     palette.setColor(QPalette.ColorRole.WindowText, QColor("#eee"))
     palette.setColor(QPalette.ColorRole.Base, QColor("#0a0a0a"))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#1e1e35"))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#161625"))
     palette.setColor(QPalette.ColorRole.Text, QColor("#eee"))
-    palette.setColor(QPalette.ColorRole.Button, QColor("#1e1e35"))
+    palette.setColor(QPalette.ColorRole.Button, QColor("#161625"))
     palette.setColor(QPalette.ColorRole.ButtonText, QColor("#eee"))
     palette.setColor(QPalette.ColorRole.Highlight, QColor("#e94560"))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#fff"))

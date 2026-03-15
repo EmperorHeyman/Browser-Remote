@@ -111,40 +111,51 @@
             100% { transform: translate(-50%,-50%) scale(2); opacity: 0; }
         }
         .mirror-controls {
-            display: flex; gap: 6px; padding: 6px 10px;
-            background: var(--surface); flex-shrink: 0;
+            position: absolute; bottom: 0; left: 0; right: 0;
+            display: flex; gap: 6px; padding: 8px 10px;
+            background: linear-gradient(transparent, rgba(0,0,0,.85));
             flex-wrap: wrap; justify-content: center;
+            z-index: 20; transition: opacity .4s;
         }
+        .mirror-controls.faded { opacity: 0; pointer-events: none; }
         .mc-btn {
-            height: 38px; padding: 0 14px; background: var(--surface2);
+            height: 38px; padding: 0 14px; background: rgba(30,30,53,.8);
             border: 1px solid #333; color: var(--text); border-radius: 8px;
             font-size: 12px; cursor: pointer; display: flex;
             align-items: center; gap: 4px; font-weight: 500;
+            touch-action: manipulation; backdrop-filter: blur(4px);
         }
         .mc-btn:active { background: var(--accent); }
 
-        /* ===== REMOTE PANEL ===== */
-        .remote-panel {
-            flex: 1; display: flex; flex-direction: column; overflow: hidden;
+        /* ===== REMOTE LAYOUT ===== */
+        .remote-layout {
+            flex: 1; display: flex; flex-direction: column;
+            background: var(--bg); overflow: hidden;
         }
-        .remote-submode-bar {
-            display: flex; background: var(--bg); flex-shrink: 0;
+        .segmented-control {
+            display: flex; gap: 8px; padding: 12px;
+            background: var(--surface); flex-shrink: 0;
         }
-        .submode-btn {
-            flex: 1; padding: 6px; text-align: center; font-size: 10px;
-            font-weight: 600; color: var(--dim); background: none;
-            border: none; border-bottom: 2px solid transparent;
-            cursor: pointer; text-transform: uppercase; letter-spacing: .3px;
+        .seg-btn {
+            flex: 1; padding: 10px; border-radius: 8px;
+            background: var(--bg); border: 1px solid var(--surface2);
+            color: var(--dim); font-size: 12px; font-weight: 600;
+            text-transform: uppercase; cursor: pointer; transition: all 0.2s;
+            touch-action: manipulation;
         }
-        .submode-btn.active { color: var(--success); border-bottom-color: var(--success); }
-
-        .remote-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .sub-dpad-wrap {
-            display: flex; flex-direction: column; align-items: center;
-            justify-content: center; gap: 10px; padding: 8px; overflow-y: auto;
+        .seg-btn.active {
+            background: var(--accent); color: var(--text);
+            border-color: var(--primary);
         }
-        .sub-dpad-wrap.full { flex: 1; }
-        .sub-dpad-wrap.half { flex: 0 0 auto; }
+        .remote-interactive-area {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: stretch; justify-content: stretch;
+            overflow: hidden; min-height: 0;
+        }
+        .remote-interactive-area.centered {
+            align-items: center; justify-content: center;
+            padding: 16px;
+        }
         .sub-trackpad-wrap {
             flex: 1; display: flex; flex-direction: column; overflow: hidden;
             min-height: 0;
@@ -250,6 +261,7 @@
             border: 2px solid #333; color: var(--text); font-size: 16px;
             font-weight: 700; cursor: pointer; text-transform: uppercase;
             letter-spacing: 1px; flex-shrink: 0;
+            touch-action: manipulation;
             transition: background 0.3s, border-color 0.3s, opacity 0.3s;
         }
         .gyro-trigger-btn.awake {
@@ -280,49 +292,46 @@
             background: var(--bg); flex-shrink: 0;
         }
 
-        /* D-Pad */
-        .dpad { position: relative; width: 180px; height: 180px; }
-        .db {
-            position: absolute; background: var(--surface);
-            border: 1px solid var(--surface2); color: var(--text);
-            font-size: 24px; display: flex; align-items: center;
-            justify-content: center; cursor: pointer;
-            border-radius: var(--radius); width: 56px; height: 56px;
+        /* Grid-based D-Pad */
+        .dpad-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 12px; width: 100%; max-width: 280px; aspect-ratio: 1 / 1;
         }
-        .db:active { background: var(--primary); transform: scale(.92); }
-        .db-u { top:0; left:50%; transform: translateX(-50%); }
-        .db-u:active { transform: translateX(-50%) scale(.92); }
-        .db-d { bottom:0; left:50%; transform: translateX(-50%); }
-        .db-d:active { transform: translateX(-50%) scale(.92); }
-        .db-l { left:0; top:50%; transform: translateY(-50%); }
-        .db-l:active { transform: translateY(-50%) scale(.92); }
-        .db-r { right:0; top:50%; transform: translateY(-50%); }
-        .db-r:active { transform: translateY(-50%) scale(.92); }
-        .db-ok {
-            top:50%; left:50%; transform: translate(-50%,-50%);
-            width: 64px; height: 64px; border-radius: 50%;
-            background: var(--primary); font-size: 14px; font-weight: 700;
+        .dpad-btn {
+            background: var(--surface); border: 1px solid var(--surface2);
+            border-radius: 16px; color: var(--text); font-size: 24px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; touch-action: manipulation; transition: transform 0.1s;
         }
-        .db-ok:active { background: #c13050; transform: translate(-50%,-50%) scale(.92); }
-        .media-row, .action-row {
-            display: flex; gap: 8px; width: 100%; max-width: 340px;
-            justify-content: center; flex-wrap: wrap;
+        .dpad-btn:active { background: var(--surface2); transform: scale(0.92); }
+        .dpad-up { grid-column: 2; grid-row: 1; }
+        .dpad-left { grid-column: 1; grid-row: 2; }
+        .dpad-right { grid-column: 3; grid-row: 2; }
+        .dpad-down { grid-column: 2; grid-row: 3; }
+        .dpad-ok {
+            grid-column: 2; grid-row: 2;
+            background: var(--primary); border-radius: 50%;
+            font-size: 16px; font-weight: bold; border: none;
         }
-        .mbtn {
-            height: 44px; padding: 0 16px; background: var(--surface);
-            border: 1px solid var(--surface2); color: var(--text);
-            border-radius: var(--radius); font-size: 18px;
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        .dpad-ok:active { background: #c13050; }
+
+        /* Persistent Global Controls */
+        .remote-global-controls {
+            padding: 16px; background: var(--surface);
+            border-top: 1px solid var(--surface2); flex-shrink: 0;
+            display: flex; flex-direction: column; gap: 12px;
         }
-        .mbtn:active { background: var(--accent); transform: scale(.93); }
-        .mbtn.pp { width: 64px; background: var(--accent); }
-        .abtn {
-            height: 36px; padding: 0 12px; background: var(--surface);
-            border: 1px solid var(--surface2); color: var(--text);
-            border-radius: var(--radius); font-size: 11px; font-weight: 600;
-            cursor: pointer;
+        .quick-action-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
         }
-        .abtn:active { background: var(--accent); }
+        .qa-btn {
+            padding: 12px 0; background: var(--bg); border: 1px solid var(--surface2);
+            border-radius: 8px; color: var(--text); font-size: 12px; font-weight: 500;
+            cursor: pointer; touch-action: manipulation;
+        }
+        .qa-btn:active { background: var(--accent); transform: scale(0.95); }
         .search-row {
             display: flex; gap: 8px; width: 100%; max-width: 340px;
         }
@@ -397,9 +406,8 @@
         .toast.err { background: var(--danger); }
 
         @media (max-height: 580px) {
-            .dpad { width: 150px; height: 150px; }
-            .db { width: 48px; height: 48px; font-size: 20px; }
-            .db-ok { width: 54px; height: 54px; }
+            .dpad-grid { max-width: 220px; }
+            .dpad-btn { font-size: 20px; }
         }
 
         /* ===== PC MODE OVERRIDES ===== */
@@ -427,6 +435,92 @@
         }
         .mon-btn.active { background: #ff6b35; color: #000; border-color: #ff6b35; font-weight: bold; }
 
+        /* ===== KEYBOARD PANEL ===== */
+        .keyboard-wrap {
+            flex: 1; display: flex; flex-direction: column;
+            background: var(--bg); padding: 8px; gap: 6px;
+            overflow: hidden;
+        }
+        .kb-input-row {
+            display: flex; gap: 8px; flex-shrink: 0;
+        }
+        .kb-input {
+            flex: 1; height: 40px; background: var(--surface);
+            border: 1px solid var(--surface2); border-radius: var(--radius);
+            color: var(--text); font-size: 14px; padding: 0 12px;
+            outline: none; -webkit-user-select: text; user-select: text;
+        }
+        .kb-input:focus { border-color: var(--primary); }
+        .kb-send {
+            width: 60px; height: 40px; background: var(--primary);
+            border: none; border-radius: var(--radius); color: #fff;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .kb-media-row {
+            display: flex; gap: 4px; justify-content: center; flex-shrink: 0;
+        }
+        .kb-media-btn {
+            flex: 1; height: 38px; background: var(--surface);
+            border: 1px solid var(--surface2); border-radius: 8px;
+            color: var(--text); font-size: 16px; cursor: pointer;
+            touch-action: manipulation;
+        }
+        .kb-media-btn:active { background: var(--accent); }
+        .kb-volume-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 4px 8px; flex-shrink: 0;
+        }
+        .kb-vol-label { font-size: 11px; color: var(--dim); }
+        .kb-vol-slider {
+            flex: 1; height: 6px; accent-color: var(--primary);
+            cursor: pointer;
+        }
+        .kb-vol-val { font-size: 11px; color: var(--text); min-width: 36px; text-align: right; }
+        .kb-rows {
+            flex: 1; display: flex; flex-direction: column;
+            gap: 4px; justify-content: flex-end;
+        }
+        .kb-row {
+            display: flex; gap: 3px; justify-content: center;
+        }
+        .kb-key {
+            min-width: 28px; height: 40px; padding: 0 6px;
+            background: var(--surface); border: 1px solid var(--surface2);
+            border-radius: 6px; color: var(--text); font-size: 14px;
+            cursor: pointer; display: flex; align-items: center;
+            justify-content: center; touch-action: manipulation;
+            transition: background 0.1s;
+        }
+        .kb-key:active { background: var(--primary); }
+        .kb-key.wide { min-width: 50px; font-size: 11px; font-weight: 600; }
+        .kb-key.space { flex: 1; }
+        .kb-key.active { background: var(--primary); border-color: var(--primary); }
+        .kb-special-row {
+            display: flex; gap: 3px; flex-shrink: 0;
+        }
+        .kb-sp {
+            flex: 1; height: 36px; background: var(--accent);
+            border: 1px solid #333; border-radius: 6px;
+            color: var(--text); font-size: 11px; font-weight: 600;
+            cursor: pointer; touch-action: manipulation;
+        }
+        .kb-sp:active { background: var(--primary); }
+
+        /* ===== FAVORITES ===== */
+        .fav-card {
+            background: var(--surface); border: 1px solid var(--surface2);
+            border-radius: var(--radius); padding: 10px 12px; margin-bottom: 6px;
+            cursor: pointer; display: flex; align-items: center; gap: 10px;
+        }
+        .fav-card:active { background: var(--accent); }
+        .fav-name { font-weight: 600; font-size: 13px; flex: 1; }
+        .fav-url { font-size: 10px; color: var(--dim); }
+        .fav-del {
+            width: 28px; height: 28px; background: var(--danger);
+            border: none; border-radius: 6px; color: #fff;
+            font-size: 14px; cursor: pointer; flex-shrink: 0;
+        }
+
         /* ===== STANDBY OVERLAY ===== */
         .standby-overlay {
             position: fixed; inset: 0; z-index: 9999;
@@ -446,6 +540,45 @@
             transition: transform .1s, background .2s;
         }
         .standby-start-btn:active { transform: scale(.95); background: #3dbb92; }
+
+        /* ===== SETTINGS PANEL ===== */
+        .settings-panel {
+            flex: 1; overflow-y: auto; padding: 16px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .settings-section {
+            background: var(--surface); border: 1px solid var(--surface2);
+            border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+        }
+        .settings-section-title {
+            font-size: 11px; font-weight: 700; color: var(--primary);
+            text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;
+        }
+        .settings-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 0; border-bottom: 1px solid var(--surface2);
+        }
+        .settings-row:last-child { border-bottom: none; }
+        .settings-label { font-size: 13px; color: var(--text); flex: 1; }
+        .settings-desc { font-size: 10px; color: var(--dim); margin-top: 2px; }
+        .settings-toggle {
+            position: relative; width: 44px; height: 24px;
+            background: var(--surface2); border-radius: 12px;
+            cursor: pointer; transition: background .2s; flex-shrink: 0;
+            border: none; padding: 0;
+        }
+        .settings-toggle::after {
+            content: ''; position: absolute; top: 3px; left: 3px;
+            width: 18px; height: 18px; border-radius: 50%;
+            background: var(--dim); transition: all .2s;
+        }
+        .settings-toggle.on { background: var(--primary); }
+        .settings-toggle.on::after { left: 23px; background: #fff; }
+        .settings-select {
+            background: var(--surface2); color: var(--text); border: 1px solid #333;
+            border-radius: 8px; padding: 6px 10px; font-size: 13px;
+            outline: none; cursor: pointer; min-width: 120px;
+        }
     </style>
 </head>
 <body>
@@ -467,11 +600,13 @@
     <button class="topbar-btn" onclick="doReload()">Reload</button>
 </div>
 
-<!-- Mode tabs (3 modes) -->
-<div class="mode-tabs">
+<!-- Mode tabs -->
+<div class="mode-tabs" id="modeTabs">
     <button class="mode-tab active" data-mode="mirror" onclick="setMode('mirror')">Mirror</button>
     <button class="mode-tab" data-mode="remote" onclick="setMode('remote')">Remote</button>
+    <button class="mode-tab" data-mode="keys" onclick="setMode('keys')">Keys</button>
     <button class="mode-tab" data-mode="browse" onclick="setMode('browse')">Browse</button>
+    <button class="mode-tab" data-mode="settings" onclick="setMode('settings')" style="flex:0.6">⚙</button>
 </div>
 
 <!-- ==================== MIRROR PANEL ==================== -->
@@ -482,16 +617,16 @@
         </div>
         <div class="mirror-hint" id="mirrorHint">Pinch to zoom &middot; Tap to click &middot; Swipe to scroll</div>
         <div class="mirror-zoom-badge" id="zoomBadge">1.0x</div>
-    </div>
-    <div class="mirror-controls">
-        <button class="mc-btn" onclick="mirrorResetZoom()">&#x229E; Reset</button>
-        <button class="mc-btn" onclick="press('back')">&larr; Esc</button>
-        <button class="mc-btn" onclick="press('backspace')">&#x232B; Bksp</button>
-        <button class="mc-btn" onclick="press('playpause')">&#x23EF; Play</button>
-        <button class="mc-btn" onclick="press('fullscreen')">&#x26F6; Full</button>
-        <button class="mc-btn" onclick="press('mute')">&#x1F507;</button>
-        <button class="mc-btn" onclick="apiPost('/api/go-back')">&#x25C1;</button>
-        <button class="mc-btn" onclick="apiPost('/api/go-forward')">&#x25B7;</button>
+        <div class="mirror-controls" id="mirrorControls">
+            <button class="mc-btn" onclick="mirrorResetZoom()">&#x229E; Reset</button>
+            <button class="mc-btn" onclick="press('back')">&larr; Esc</button>
+            <button class="mc-btn" onclick="press('backspace')">&#x232B; Bksp</button>
+            <button class="mc-btn" onclick="press('playpause')">&#x23EF; Play</button>
+            <button class="mc-btn" onclick="press('fullscreen')">&#x26F6; Full</button>
+            <button class="mc-btn" onclick="press('mute')">&#x1F507;</button>
+            <button class="mc-btn" onclick="haptic(20);apiPost('/api/go-back')">&#x25C1;</button>
+            <button class="mc-btn" onclick="haptic(20);apiPost('/api/go-forward')">&#x25B7;</button>
+        </div>
     </div>
     <div class="monitor-picker" id="monitorPicker">
         <span class="monitor-picker-label">Monitor:</span>
@@ -500,14 +635,25 @@
 
 <!-- ==================== REMOTE PANEL ==================== -->
 <div class="panel" id="panel-remote">
-    <div class="remote-panel">
-        <div class="remote-submode-bar">
-            <button class="submode-btn active" data-sub="dpad" onclick="setSubMode('dpad')">D-Pad</button>
-            <button class="submode-btn" data-sub="combo" onclick="setSubMode('combo')">Combo</button>
-            <button class="submode-btn" data-sub="trackpad" onclick="setSubMode('trackpad')">Trackpad</button>
-            <button class="submode-btn" data-sub="gyro" onclick="setSubMode('gyro')">Gyro</button>
+    <div class="remote-layout">
+        <div class="segmented-control">
+            <button class="seg-btn active" data-sub="dpad" onclick="setSubMode('dpad')">D-Pad</button>
+            <button class="seg-btn" data-sub="trackpad" onclick="setSubMode('trackpad')">Trackpad</button>
+            <button class="seg-btn" data-sub="gyro" onclick="setSubMode('gyro')">Gyro</button>
         </div>
-        <div class="remote-content" id="remoteContent"></div>
+        <div class="remote-interactive-area" id="remoteContent"></div>
+        <div class="remote-global-controls">
+            <div class="search-row">
+                <input class="search-input" id="searchInput" placeholder="Type text..." autocomplete="off" autocorrect="off">
+                <button class="search-go" onclick="sendText()">&#x27A4;</button>
+            </div>
+            <div class="quick-action-grid">
+                <button class="qa-btn" onclick="press('back')">&larr; Esc</button>
+                <button class="qa-btn" onclick="press('playpause')">&#x23EF; Play</button>
+                <button class="qa-btn" onclick="press('mute')">&#x1F507; Mute</button>
+                <button class="qa-btn" onclick="press('fullscreen')">&#x26F6; Full</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -520,10 +666,131 @@
                        autocomplete="off" autocorrect="off">
                 <button class="nav-go" onclick="goUrl()">Go</button>
             </div>
-            <div class="browse-section-title">Quick Sites</div>
+
+            <!-- Cast from phone -->
+            <div class="nav-url-row" style="margin-bottom:10px">
+                <input class="nav-input" id="castUrl" placeholder="Cast URL to projector..."
+                       autocomplete="off" autocorrect="off">
+                <button class="nav-go" onclick="castToProjector()" style="background:var(--success)">📺</button>
+            </div>
+
+            <!-- Favorites -->
+            <div class="browse-section-title">⭐ Favorites</div>
+            <div id="favCards"></div>
+            <div class="nav-url-row" style="margin-top:6px">
+                <input class="nav-input" id="favName" placeholder="Name" autocomplete="off" style="flex:0.4">
+                <input class="nav-input" id="favUrl" placeholder="URL" autocomplete="off">
+                <button class="nav-go" onclick="addFavorite()" style="background:var(--accent)">+</button>
+            </div>
+
+            <div class="browse-section-title" style="margin-top:12px">Quick Sites</div>
             <div id="siteCards"></div>
             <div class="browse-section-title" style="margin-top:12px">Open Tabs</div>
             <div id="tabsList"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== KEYS PANEL (Full Keyboard) ==================== -->
+<div class="panel" id="panel-keys">
+    <div class="keyboard-wrap">
+        <div class="kb-input-row">
+            <input class="kb-input" id="kbInput" placeholder="Type text to send..." autocomplete="off" autocorrect="off">
+            <button class="kb-send" onclick="kbSendText()">Send</button>
+        </div>
+        <div class="kb-media-row" id="kbMediaRow">
+            <button class="kb-media-btn" onclick="mediaAction('prev')">⏮</button>
+            <button class="kb-media-btn" onclick="mediaAction('play_pause')">⏯</button>
+            <button class="kb-media-btn" onclick="mediaAction('next')">⏭</button>
+            <button class="kb-media-btn" onclick="mediaAction('mute')">🔇</button>
+            <button class="kb-media-btn" onclick="mediaAction('vol_down')">🔉</button>
+            <button class="kb-media-btn" onclick="mediaAction('vol_up')">🔊</button>
+        </div>
+        <div class="kb-volume-row" id="kbVolumeRow">
+            <span class="kb-vol-label">Vol</span>
+            <input type="range" class="kb-vol-slider" id="volumeSlider" min="0" max="100" value="100"
+                   oninput="setVolumeFromSlider(this.value)">
+            <span class="kb-vol-val" id="volumeVal">100%</span>
+        </div>
+        <div class="kb-rows" id="kbRows"></div>
+        <div class="kb-special-row">
+            <button class="kb-sp" onclick="kbKey('tab')">Tab</button>
+            <button class="kb-sp" onclick="kbKey('escape')">Esc</button>
+            <button class="kb-sp" onclick="kbKey('win')">Win</button>
+            <button class="kb-sp" onclick="kbKey('left')">←</button>
+            <button class="kb-sp" onclick="kbKey('down')">↓</button>
+            <button class="kb-sp" onclick="kbKey('up')">↑</button>
+            <button class="kb-sp" onclick="kbKey('right')">→</button>
+            <button class="kb-sp" onclick="kbKey('delete')">Del</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== SETTINGS PANEL ==================== -->
+<div class="panel" id="panel-settings">
+    <div class="settings-panel">
+        <div class="settings-section">
+            <div class="settings-section-title">Tabs</div>
+            <div class="settings-row">
+                <div><div class="settings-label">Show Mirror tab</div></div>
+                <button class="settings-toggle on" id="sToggleMirror" onclick="toggleSetting('tab_mirror')"></button>
+            </div>
+            <div class="settings-row">
+                <div><div class="settings-label">Show Remote tab</div></div>
+                <button class="settings-toggle on" id="sToggleRemote" onclick="toggleSetting('tab_remote')"></button>
+            </div>
+            <div class="settings-row">
+                <div><div class="settings-label">Show Keys tab</div></div>
+                <button class="settings-toggle on" id="sToggleKeys" onclick="toggleSetting('tab_keys')"></button>
+            </div>
+            <div class="settings-row">
+                <div><div class="settings-label">Show Browse tab</div></div>
+                <button class="settings-toggle on" id="sToggleBrowse" onclick="toggleSetting('tab_browse')"></button>
+            </div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label">Default tab on open</div>
+                    <div class="settings-desc">Which tab to show when the page loads</div>
+                </div>
+                <select class="settings-select" id="sDefaultTab" onchange="saveSetting('default_tab', this.value)">
+                    <option value="mirror">Mirror</option>
+                    <option value="remote">Remote</option>
+                    <option value="keys">Keys</option>
+                    <option value="browse">Browse</option>
+                </select>
+            </div>
+        </div>
+        <div class="settings-section">
+            <div class="settings-section-title">Volume</div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label">Hardware volume keys</div>
+                    <div class="settings-desc">Use phone volume buttons to control PC volume</div>
+                </div>
+                <button class="settings-toggle on" id="sToggleHwVol" onclick="toggleSetting('hw_volume')"></button>
+            </div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label">Volume step size</div>
+                    <div class="settings-desc">% change per button press</div>
+                </div>
+                <select class="settings-select" id="sVolStep" onchange="saveSetting('vol_step', this.value)">
+                    <option value="2">2%</option>
+                    <option value="5" selected>5%</option>
+                    <option value="10">10%</option>
+                    <option value="15">15%</option>
+                </select>
+            </div>
+        </div>
+        <div class="settings-section">
+            <div class="settings-section-title">Interface</div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label">Haptic feedback</div>
+                    <div class="settings-desc">Vibrate on button presses</div>
+                </div>
+                <button class="settings-toggle on" id="sToggleHaptic" onclick="toggleSetting('haptic')"></button>
+            </div>
         </div>
     </div>
 </div>
@@ -535,10 +802,13 @@
 // ============================================
 // CONFIG
 // ============================================
-const SCROLL_MULTIPLIER = 3;
-const TRACKPAD_SENSITIVITY = 2.2;
-const TRACKPAD_SCROLL_MULT = 2.5;
 const MOVE_SEND_INTERVAL = 16;
+
+var SCROLL_MULTIPLIER = 3;
+var TRACKPAD_SENSITIVITY = 2.2;
+var TRACKPAD_SCROLL_MULT = 2.5;
+var GYRO_SENS_X = 40.0;
+var GYRO_SENS_Y = 25.0;
 
 let currentMode = 'mirror';
 let currentSubMode = 'dpad';
@@ -552,7 +822,36 @@ function accelMult(rawDist, dt) {
 }
 
 // Haptic feedback helper
-function haptic(ms) { if (navigator.vibrate) navigator.vibrate(ms || 15); }
+function haptic(ms) {
+    if (getLocalSetting('haptic') === false) return;
+    if (navigator.vibrate) navigator.vibrate(ms || 15);
+}
+
+// ============================================
+// MIRROR CONTROLS AUTO-FADE
+// ============================================
+var mirrorControlsFadeTimer = null;
+function showMirrorControls() {
+    var mc = document.getElementById('mirrorControls');
+    if (!mc) return;
+    mc.classList.remove('faded');
+    clearTimeout(mirrorControlsFadeTimer);
+    mirrorControlsFadeTimer = setTimeout(function() {
+        mc.classList.add('faded');
+    }, 3000);
+}
+(function() {
+    var mw = document.getElementById('mirrorWrap');
+    if (mw) {
+        mw.addEventListener('touchstart', showMirrorControls, { passive: true });
+        mw.addEventListener('mousemove', showMirrorControls, { passive: true });
+    }
+    // Initial fade after 3s
+    setTimeout(function() {
+        var mc = document.getElementById('mirrorControls');
+        if (mc) mc.classList.add('faded');
+    }, 3000);
+})();
 
 // ============================================
 // API helpers
@@ -579,7 +878,7 @@ async function apiGet(path) { const r = await fetch(path); return r.json(); }
 // MODE SWITCHING
 // ============================================
 function hasTrackpad() {
-    return currentMode === 'remote' && (currentSubMode === 'combo' || currentSubMode === 'trackpad' || currentSubMode === 'gyro');
+    return currentMode === 'remote' && (currentSubMode === 'trackpad' || currentSubMode === 'gyro');
 }
 
 function setMode(mode) {
@@ -595,7 +894,9 @@ function setMode(mode) {
 
     if (mode === 'mirror') startMirror(); else stopMirror();
     if (mode === 'remote') renderSubMode();
-    if (mode === 'browse') { loadSites(); loadTabs(); }
+    if (mode === 'browse') { loadSites(); loadTabs(); loadFavorites(); }
+    if (mode === 'keys') { renderKeyboard(); loadVolume(); }
+    if (mode === 'settings') { applyLocalSettings(); }
 
     const hasTP = hasTrackpad();
     if (!hadTP && hasTP) showCursor();
@@ -611,7 +912,7 @@ function setSubMode(sub) {
     if (currentSubMode === 'gyro') stopGyro();
     const hadTP = hasTrackpad();
     currentSubMode = sub;
-    document.querySelectorAll('.submode-btn').forEach(b =>
+    document.querySelectorAll('.seg-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.sub === sub));
     renderSubMode();
     const hasTP = hasTrackpad();
@@ -623,89 +924,43 @@ function renderSubMode() {
     const c = document.getElementById('remoteContent');
     if (!c) return;
     if (currentSubMode === 'dpad') {
-        c.innerHTML = '<div class="sub-dpad-wrap full">' + dpadHTML() + mediaHTML() + actionHTML() + searchHTML() + '</div>';
-    } else if (currentSubMode === 'combo') {
-        c.innerHTML =
-            '<div class="sub-trackpad-wrap">' +
-                '<div class="trackpad-info" id="trackpadInfo">Cursor: --</div>' +
-                '<div class="sub-trackpad-area" id="trackpadArea">' +
-                    '<div class="trackpad-hint" id="trackpadHint">Drag to move &middot; Tap to click</div>' +
-                    '<div class="trackpad-crosshair" id="trackpadDot"></div>' +
-                '</div>' +
-            '</div>' +
-            '<div class="sub-dpad-wrap half">' + dpadHTML() + mediaHTML() + actionHTML() + searchHTML() + '</div>';
+        c.classList.add('centered');
+        c.innerHTML = dpadHTML();
     } else if (currentSubMode === 'trackpad') {
+        c.classList.remove('centered');
         c.innerHTML =
             '<div class="sub-trackpad-wrap">' +
-                '<div class="trackpad-info" id="trackpadInfo">Cursor: --</div>' +
                 '<div class="sub-trackpad-area" id="trackpadArea">' +
                     '<div class="trackpad-hint" id="trackpadHint">Drag to move &middot; Tap to click &middot; 2-finger scroll</div>' +
                     '<div class="trackpad-crosshair" id="trackpadDot"></div>' +
                 '</div>' +
-            '</div>' +
-            '<div style="display:flex;gap:6px;padding:6px 10px;background:var(--surface);flex-wrap:wrap;justify-content:center;flex-shrink:0">' +
-                '<button class="mc-btn" onclick="press(\'back\')">&larr; Esc</button>' +
-                '<button class="mc-btn" onclick="press(\'backspace\')">&#x232B; Bksp</button>' +
-                '<button class="mc-btn" onclick="press(\'playpause\')">&#x23EF; Play</button>' +
-                '<button class="mc-btn" onclick="press(\'fullscreen\')">&#x26F6; Full</button>' +
-                '<button class="mc-btn" onclick="press(\'mute\')">&#x1F507;</button>' +
-                '<button class="mc-btn" onclick="apiPost(\'/api/go-back\')">&#x25C1;</button>' +
-                '<button class="mc-btn" onclick="apiPost(\'/api/go-forward\')">&#x25B7;</button>' +
             '</div>';
     } else if (currentSubMode === 'gyro') {
+        c.classList.remove('centered');
         c.innerHTML =
             '<div class="gyro-wrap">' +
-                '<div class="gyro-status" id="gyroStatus">Gyro: sleeping &middot; Tap to wake</div>' +
                 '<div class="gyro-area" id="gyroArea">' +
-                    '<div class="gyro-hint" id="gyroHint">Tap to wake &middot; Flick wrist to aim<br>Tap again to click<br>Auto-sleeps after 4s<br><br><span style="color:#fa0;font-size:11px;line-height:1.3;display:block">Chrome/Android: If no movement, enable<br><b>chrome://flags/#unsafely-treat-insecure-origin-as-secure</b><br>and add this IP.</span></div>' +
+                    '<div class="gyro-hint" id="gyroHint">Tap to wake &middot; Flick wrist to aim</div>' +
                     '<div class="gyro-crosshair" id="gyroDot"></div>' +
-                    '<div id="gyroDebug" style="position:absolute; top:10px; left:10px; color:#0f0; font-family:monospace; font-size:12px; pointer-events:none; text-shadow: 1px 1px 0 #000; z-index:100;"></div>' +
                     '<button class="gyro-scroll-btn" data-scroll="up">&#x25B2;</button>' +
                     '<button class="gyro-scroll-btn" data-scroll="down">&#x25BC;</button>' +
                     '<button class="gyro-scroll-btn" data-scroll="left">&#x25C0;</button>' +
                     '<button class="gyro-scroll-btn" data-scroll="right">&#x25B6;</button>' +
                 '</div>' +
-                '<div class="gyro-controls">' +
-                    '<button class="mc-btn" onclick="press(\'back\')">&larr; Esc</button>' +
-                    '<button class="mc-btn" onclick="press(\'playpause\')">&#x23EF; Play</button>' +
-                    '<button class="mc-btn" onclick="press(\'fullscreen\')">&#x26F6; Full</button>' +
-                    '<button class="mc-btn" onclick="press(\'mute\')">&#x1F507;</button>' +
-                '</div>' +
                 '<button class="gyro-trigger-btn sleeping" id="gyroTrigger">&#x1F3AF; TAP TO WAKE</button>' +
             '</div>';
         setTimeout(bindGyro, 50);
     }
-    if (currentSubMode === 'combo' || currentSubMode === 'trackpad') bindTrackpad();
-    const si = document.getElementById('searchInput');
-    if (si) si.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendText(); } });
+    if (currentSubMode === 'trackpad') bindTrackpad();
 }
 
 function dpadHTML() {
-    return '<div class="dpad">' +
-        '<button class="db db-u" onclick="press(\'up\')">&#x25B2;</button>' +
-        '<button class="db db-d" onclick="press(\'down\')">&#x25BC;</button>' +
-        '<button class="db db-l" onclick="press(\'left\')">&#x25C4;</button>' +
-        '<button class="db db-r" onclick="press(\'right\')">&#x25BA;</button>' +
-        '<button class="db db-ok" onclick="press(\'enter\')">OK</button></div>';
-}
-function mediaHTML() {
-    return '<div class="media-row">' +
-        '<button class="mbtn" onclick="press(\'rewind\')">&#x23EA;</button>' +
-        '<button class="mbtn pp" onclick="press(\'playpause\')">&#x23EF;</button>' +
-        '<button class="mbtn" onclick="press(\'forward\')">&#x23E9;</button></div>';
-}
-function actionHTML() {
-    return '<div class="action-row">' +
-        '<button class="abtn" onclick="press(\'back\')">&larr; Esc</button>' +
-        '<button class="abtn" onclick="press(\'backspace\')">&#x232B; Bksp</button>' +
-        '<button class="abtn" onclick="press(\'fullscreen\')">&#x26F6; Full</button>' +
-        '<button class="abtn" onclick="press(\'mute\')">&#x1F507; Mute</button>' +
-        '<button class="abtn" onclick="press(\'tab\')">&#x21E5; Tab</button></div>';
-}
-function searchHTML() {
-    return '<div class="search-row">' +
-        '<input class="search-input" id="searchInput" placeholder="Type text..." autocomplete="off" autocorrect="off">' +
-        '<button class="search-go" onclick="sendText()">&#x27A4;</button></div>';
+    return '<div class="dpad-grid">' +
+        '<button class="dpad-btn dpad-up" onclick="press(\'up\')">&#x25B2;</button>' +
+        '<button class="dpad-btn dpad-left" onclick="press(\'left\')">&#x25C4;</button>' +
+        '<button class="dpad-btn dpad-ok" onclick="press(\'enter\')">OK</button>' +
+        '<button class="dpad-btn dpad-right" onclick="press(\'right\')">&#x25BA;</button>' +
+        '<button class="dpad-btn dpad-down" onclick="press(\'down\')">&#x25BC;</button></div>';
 }
 
 // ============================================
@@ -924,7 +1179,7 @@ function fetchFallbackFrame() {
         applyTransform();
     }, { passive: false });
 
-    window.mirrorResetZoom = function() { scale = 1; panX = 0; panY = 0; applyTransform(); showToast('Zoom reset'); };
+    window.mirrorResetZoom = function() { haptic(15); scale = 1; panX = 0; panY = 0; applyTransform(); showToast('Zoom reset'); };
 })();
 
 // ============================================
@@ -954,12 +1209,12 @@ async function showCursor() {
 }
 async function hideCursor() {
     try { await apiPost('/api/cursor/hide'); } catch(e) {}
-    var el = document.getElementById('trackpadInfo');
-    if (el) el.textContent = 'Cursor: hidden';
+    var el = document.getElementById('titleText');
+    if (el) el.textContent = 'Cursor hidden';
 }
 function updateTrackpadInfo(x, y) {
-    var el = document.getElementById('trackpadInfo');
-    if (el) el.textContent = 'Cursor: ' + Math.round(x) + ', ' + Math.round(y);
+    var el = document.getElementById('titleText');
+    if (el && hasTrackpad()) el.textContent = 'Cursor: ' + Math.round(x) + ', ' + Math.round(y);
 }
 
 // --- Trackpad WebSocket state (module-level for cleanup) ---
@@ -979,6 +1234,7 @@ function bindTrackpad() {
     if (!area) return;
 
     var t1 = null, t2 = null, moved = false, hh = false;
+    var edgeSwipeStartX = null; // Track edge swipe for back/forward nav
 
     // --- WebSocket connection (same endpoint as gyro — handles dx/dy, click, scroll) ---
     var tpReconnDelay = 500;
@@ -990,7 +1246,10 @@ function bindTrackpad() {
         trackpadWS.onmessage = function(ev) {
             try {
                 var d = JSON.parse(ev.data);
-                if (d.x !== undefined) updateTrackpadInfo(d.x, d.y);
+                if (d.type === 'cursor_hidden') {
+                    var el = document.getElementById('titleText');
+                    if (el) el.textContent = 'Cursor hidden';
+                } else if (d.x !== undefined) updateTrackpadInfo(d.x, d.y);
             } catch(e) {}
         };
         trackpadWS.onerror = function() { trackpadWS.close(); };
@@ -1038,9 +1297,13 @@ function bindTrackpad() {
         e.preventDefault(); hH();
         if (e.touches.length === 1) {
             var touch = e.touches[0];
+            var r = area.getBoundingClientRect();
             t1 = { x: touch.clientX, y: touch.clientY, time: Date.now() };
             t2 = null; moved = false;
-            if (dot) { dot.classList.add('active'); var r = area.getBoundingClientRect(); dot.style.left = (touch.clientX - r.left) + 'px'; dot.style.top = (touch.clientY - r.top) + 'px'; }
+            // Detect edge start for swipe navigation (within 20px of left/right edge)
+            var relX = touch.clientX - r.left;
+            edgeSwipeStartX = (relX < 20) ? 'left' : (relX > r.width - 20) ? 'right' : null;
+            if (dot) { dot.classList.add('active'); dot.style.left = (touch.clientX - r.left) + 'px'; dot.style.top = (touch.clientY - r.top) + 'px'; }
         } else if (e.touches.length === 2) {
             var a = e.touches[0], b = e.touches[1];
             t2 = { y: (a.clientY + b.clientY) / 2, x: (a.clientX + b.clientX) / 2 };
@@ -1081,6 +1344,19 @@ function bindTrackpad() {
     area.addEventListener('touchend', function(e) {
         e.preventDefault();
         if (dot) dot.classList.remove('active');
+        // Edge swipe navigation: swipe from left edge = back, from right edge = forward
+        if (moved && edgeSwipeStartX && t1 && e.touches.length === 0) {
+            var endX = e.changedTouches[0].clientX;
+            if (edgeSwipeStartX === 'left' && (endX - (t1.x - (moved ? 50 : 0))) > 60) {
+                apiPost('/api/go-back'); haptic(30); showToast('Back');
+                edgeSwipeStartX = null; t1 = null; t2 = null; moved = false; return;
+            }
+            if (edgeSwipeStartX === 'right' && (endX - t1.x) < -60) {
+                apiPost('/api/go-forward'); haptic(30); showToast('Forward');
+                edgeSwipeStartX = null; t1 = null; t2 = null; moved = false; return;
+            }
+        }
+        edgeSwipeStartX = null;
         if (!moved && t1 && e.touches.length === 0 && Date.now() - t1.time < 400) {
             haptic(30);
             tapRipple(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
@@ -1131,8 +1407,7 @@ var gyroBound = false;
 var gyroRAF = null;
 
 // --- Tuning knobs ---
-var GYRO_SENS_X = 40.0;    // Angle delta sensitivity for X (deg -> px)
-var GYRO_SENS_Y = 25.0;    // Angle delta sensitivity for Y (deg -> px)
+// GYRO_SENS_X and GYRO_SENS_Y are defined in CONFIG section above
 var GYRO_DEADZONE_X = 0.0; // deg below which X is zeroed (0 = no deadzone)
 var GYRO_DEADZONE_Y = 0.0; // deg below which Y is zeroed (0 = no deadzone)
 var GYRO_EMA_ALPHA = 0.6;  // Smoothing factor (higher = less smooth, more responsive)
@@ -1155,10 +1430,10 @@ function sleepGyro() {
     gyroLastAlpha = null;
     var trigger = document.getElementById('gyroTrigger');
     var dot = document.getElementById('gyroDot');
-    var status = document.getElementById('gyroStatus');
+    var status = document.getElementById('titleText');
     if (trigger) { trigger.classList.remove('awake'); trigger.classList.add('sleeping'); trigger.textContent = '\u{1F3AF} TAP TO WAKE'; }
     if (dot) dot.classList.remove('active');
-    if (status) status.textContent = 'Gyro: sleeping \u2022 Tap to wake';
+    if (status) status.textContent = 'Gyro: sleeping';
     haptic(30);
 }
 
@@ -1184,7 +1459,7 @@ function bindGyro() {
     var area = document.getElementById('gyroArea');
     var dot = document.getElementById('gyroDot');
     var trigger = document.getElementById('gyroTrigger');
-    var status = document.getElementById('gyroStatus');
+    var status = document.getElementById('titleText');
     var hint = document.getElementById('gyroHint');
     if (!trigger || !area) return;
 
@@ -1216,9 +1491,12 @@ function bindGyro() {
         gyroWS.onmessage = function(ev) {
             try {
                 var d = JSON.parse(ev.data);
-                if (d.type === 'clicked') {
+                if (d.type === 'cursor_hidden') {
+                    if (status) status.textContent = 'Cursor hidden';
+                } else if (d.type === 'clicked') {
                     if (status) status.textContent = 'Gyro: clicked at ' + d.x + ', ' + d.y;
-                } else {
+                } else if (d.x !== undefined) {
+                    if (d.clamped) haptic(8);
                     if (status) status.textContent = 'Gyro: ' + d.x + ', ' + d.y;
                 }
             } catch(e) {}
@@ -1451,6 +1729,252 @@ function bindGyro() {
 }
 
 // ============================================
+// KEYBOARD MODE
+// ============================================
+var kbShift = false, kbCtrl = false, kbAlt = false;
+
+function renderKeyboard() {
+    var container = document.getElementById('kbRows');
+    if (!container) return;
+    var rows = [
+        ['1','2','3','4','5','6','7','8','9','0'],
+        ['q','w','e','r','t','y','u','i','o','p'],
+        ['a','s','d','f','g','h','j','k','l'],
+        ['z','x','c','v','b','n','m'],
+    ];
+    container.innerHTML = '';
+    rows.forEach(function(row, ri) {
+        var rowDiv = document.createElement('div');
+        rowDiv.className = 'kb-row';
+        if (ri === 3) {
+            // Add Shift before z row
+            var shiftBtn = document.createElement('button');
+            shiftBtn.className = 'kb-key wide' + (kbShift ? ' active' : '');
+            shiftBtn.textContent = '⇧';
+            shiftBtn.id = 'kbShiftBtn';
+            shiftBtn.onclick = function() { kbShift = !kbShift; renderKeyboard(); };
+            rowDiv.appendChild(shiftBtn);
+        }
+        row.forEach(function(key) {
+            var btn = document.createElement('button');
+            btn.className = 'kb-key';
+            btn.textContent = kbShift ? key.toUpperCase() : key;
+            btn.onclick = function() { kbChar(kbShift ? key.toUpperCase() : key); };
+            rowDiv.appendChild(btn);
+        });
+        if (ri === 3) {
+            // Add Backspace after m row
+            var bsBtn = document.createElement('button');
+            bsBtn.className = 'kb-key wide';
+            bsBtn.textContent = '⌫';
+            bsBtn.onclick = function() { kbKey('backspace'); };
+            rowDiv.appendChild(bsBtn);
+        }
+        container.appendChild(rowDiv);
+    });
+    // Bottom row: Ctrl, Alt, Space, Enter
+    var bottom = document.createElement('div');
+    bottom.className = 'kb-row';
+
+    var ctrlBtn = document.createElement('button');
+    ctrlBtn.className = 'kb-key wide' + (kbCtrl ? ' active' : '');
+    ctrlBtn.textContent = 'Ctrl';
+    ctrlBtn.id = 'kbCtrlBtn';
+    ctrlBtn.onclick = function() { kbCtrl = !kbCtrl; renderKeyboard(); };
+    bottom.appendChild(ctrlBtn);
+
+    var altBtn = document.createElement('button');
+    altBtn.className = 'kb-key wide' + (kbAlt ? ' active' : '');
+    altBtn.textContent = 'Alt';
+    altBtn.id = 'kbAltBtn';
+    altBtn.onclick = function() { kbAlt = !kbAlt; renderKeyboard(); };
+    bottom.appendChild(altBtn);
+
+    var spaceBtn = document.createElement('button');
+    spaceBtn.className = 'kb-key space';
+    spaceBtn.textContent = 'Space';
+    spaceBtn.onclick = function() { kbKey('space'); };
+    bottom.appendChild(spaceBtn);
+
+    var enterBtn = document.createElement('button');
+    enterBtn.className = 'kb-key wide';
+    enterBtn.textContent = '↵';
+    enterBtn.onclick = function() { kbKey('enter'); };
+    bottom.appendChild(enterBtn);
+
+    container.appendChild(bottom);
+}
+
+function kbChar(ch) {
+    haptic(10);
+    var mods = [];
+    if (kbCtrl) mods.push('ctrl');
+    if (kbAlt) mods.push('alt');
+    if (mods.length > 0) {
+        apiPost('/api/keyboard', { key: ch, modifiers: mods }).catch(function(){});
+        kbCtrl = false; kbAlt = false; kbShift = false;
+        renderKeyboard();
+    } else {
+        apiPost('/api/keyboard', { text: ch }).catch(function(){});
+        if (kbShift) { kbShift = false; renderKeyboard(); }
+    }
+}
+
+function kbKey(key) {
+    haptic(15);
+    var mods = [];
+    if (kbCtrl) mods.push('ctrl');
+    if (kbShift) mods.push('shift');
+    if (kbAlt) mods.push('alt');
+    apiPost('/api/keyboard', { key: key, modifiers: mods.length ? mods : undefined }).catch(function(){});
+    if (kbCtrl || kbShift || kbAlt) {
+        kbCtrl = false; kbShift = false; kbAlt = false;
+        renderKeyboard();
+    }
+}
+
+function kbSendText() {
+    haptic(20);
+    var inp = document.getElementById('kbInput');
+    if (!inp || !inp.value.trim()) return;
+    apiPost('/api/keyboard', { text: inp.value }).then(function() {
+        showToast('Sent: "' + inp.value.substring(0, 30) + '"');
+        inp.value = '';
+    }).catch(function(){});
+}
+document.addEventListener('DOMContentLoaded', function() {
+    var kbInp = document.getElementById('kbInput');
+    if (kbInp) kbInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); kbSendText(); } });
+    var castInp = document.getElementById('castUrl');
+    if (castInp) castInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); castToProjector(); } });
+});
+
+// ============================================
+// MEDIA CONTROLS
+// ============================================
+function mediaAction(action) {
+    haptic(20);
+    apiPost('/api/media/' + action).then(function() {
+        showToast('Media: ' + action.replace('_', ' '));
+    }).catch(function(){});
+}
+
+// ============================================
+// VOLUME CONTROL
+// ============================================
+function loadVolume() {
+    apiGet('/api/volume').then(function(d) {
+        if (d.volume >= 0) {
+            var pct = Math.round(d.volume * 100);
+            var slider = document.getElementById('volumeSlider');
+            var val = document.getElementById('volumeVal');
+            if (slider) slider.value = pct;
+            if (val) val.textContent = pct + '%';
+        }
+    }).catch(function(){});
+}
+
+function setVolumeFromSlider(val) {
+    var pct = parseInt(val);
+    var el = document.getElementById('volumeVal');
+    if (el) el.textContent = pct + '%';
+    apiPost('/api/volume', { volume: pct / 100.0 }).catch(function(){});
+}
+
+// ============================================
+// FAVORITES / BOOKMARKS
+// ============================================
+async function loadFavorites() {
+    try {
+        var data = await apiGet('/api/favorites');
+        var container = document.getElementById('favCards');
+        if (!container) return;
+        container.innerHTML = '';
+        (data.favorites || []).forEach(function(fav) {
+            var card = document.createElement('div');
+            card.className = 'fav-card';
+            card.innerHTML = '<div style="flex:1"><div class="fav-name">' + (fav.name || fav.url) +
+                '</div><div class="fav-url">' + fav.url + '</div></div>';
+            var del = document.createElement('button');
+            del.className = 'fav-del';
+            del.textContent = '×';
+            del.onclick = function(e) { e.stopPropagation(); removeFavorite(fav.url); };
+            card.appendChild(del);
+            card.onclick = function() { haptic(20); apiPost('/api/navigate', { url: fav.url }); showToast('Opening ' + fav.name); };
+            container.appendChild(card);
+        });
+    } catch(e) {}
+}
+
+async function addFavorite() {
+    haptic(20);
+    var nameInp = document.getElementById('favName');
+    var urlInp = document.getElementById('favUrl');
+    if (!nameInp || !urlInp) return;
+    var name = nameInp.value.trim();
+    var url = urlInp.value.trim();
+    if (!url) return;
+    if (!name) name = url;
+    if (url.indexOf('http') !== 0) url = 'https://' + url;
+    try {
+        await apiPost('/api/favorites', { name: name, url: url });
+        nameInp.value = ''; urlInp.value = '';
+        showToast('Favorite added');
+        loadFavorites();
+    } catch(e) {}
+}
+
+async function removeFavorite(url) {
+    haptic(15);
+    try {
+        await fetch('/api/favorites', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url })
+        });
+        showToast('Removed');
+        loadFavorites();
+    } catch(e) {}
+}
+
+// ============================================
+// CAST FROM PHONE
+// ============================================
+async function castToProjector() {
+    haptic(25);
+    var inp = document.getElementById('castUrl');
+    if (!inp) return;
+    var url = inp.value.trim();
+    if (!url) return;
+    if (url.indexOf('http') !== 0) url = 'https://' + url;
+    try {
+        await apiPost('/api/navigate', { url: url });
+        showToast('📺 Casting to projector...');
+        inp.value = '';
+    } catch(e) {}
+}
+
+// ============================================
+// SETTINGS (fetch on init and apply)
+// ============================================
+var serverSettings = {};
+async function loadSettings() {
+    try {
+        serverSettings = await apiGet('/api/settings');
+        // Apply sensitivity and scroll speed to client-side constants
+        if (serverSettings.cursor_sensitivity) {
+            TRACKPAD_SENSITIVITY = 2.2 * serverSettings.cursor_sensitivity;
+            GYRO_SENS_X = 40.0 * serverSettings.cursor_sensitivity;
+            GYRO_SENS_Y = 25.0 * serverSettings.cursor_sensitivity;
+        }
+        if (serverSettings.scroll_speed) {
+            TRACKPAD_SCROLL_MULT = 2.5 * serverSettings.scroll_speed;
+            SCROLL_MULTIPLIER = 3 * serverSettings.scroll_speed;
+        }
+    } catch(e) {}
+}
+
+// ============================================
 // SITES
 // ============================================
 var SITE_ICONS = { youtube: '\uD83D\uDCFA', netflix: '\uD83C\uDFAC', oneplay: '\uD83C\uDFAE' };
@@ -1667,10 +2191,152 @@ document.addEventListener('keydown', function(e) {
 // ============================================
 // INIT
 // ============================================
+// ============================================
+// LOCAL SETTINGS (localStorage)
+// ============================================
+var LOCAL_SETTINGS_KEY = 'browserRemoteSettings';
+var localSettingsDefaults = {
+    tab_mirror: true, tab_remote: true, tab_keys: true, tab_browse: true,
+    default_tab: 'mirror', hw_volume: true, vol_step: '5', haptic: true
+};
+
+function getLocalSettings() {
+    try {
+        var s = JSON.parse(localStorage.getItem(LOCAL_SETTINGS_KEY));
+        if (s && typeof s === 'object') return Object.assign({}, localSettingsDefaults, s);
+    } catch(e) {}
+    return Object.assign({}, localSettingsDefaults);
+}
+
+function getLocalSetting(key) {
+    return getLocalSettings()[key];
+}
+
+function saveSetting(key, val) {
+    var s = getLocalSettings();
+    s[key] = val;
+    localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(s));
+    applyLocalSettings();
+}
+
+function toggleSetting(key) {
+    haptic(15);
+    var s = getLocalSettings();
+    s[key] = !s[key];
+    localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(s));
+    applyLocalSettings();
+}
+
+function applyLocalSettings() {
+    var s = getLocalSettings();
+    // Tab visibility
+    var tabMap = { mirror: 'tab_mirror', remote: 'tab_remote', keys: 'tab_keys', browse: 'tab_browse' };
+    document.querySelectorAll('.mode-tab').forEach(function(tab) {
+        var mode = tab.dataset.mode;
+        if (mode === 'settings') return; // always show settings
+        var key = tabMap[mode];
+        if (key) tab.style.display = s[key] ? '' : 'none';
+    });
+    // Update toggle buttons
+    var toggleMap = {
+        tab_mirror: 'sToggleMirror', tab_remote: 'sToggleRemote',
+        tab_keys: 'sToggleKeys', tab_browse: 'sToggleBrowse',
+        hw_volume: 'sToggleHwVol', haptic: 'sToggleHaptic'
+    };
+    for (var k in toggleMap) {
+        var el = document.getElementById(toggleMap[k]);
+        if (el) el.classList.toggle('on', !!s[k]);
+    }
+    // Default tab select
+    var dtSel = document.getElementById('sDefaultTab');
+    if (dtSel) dtSel.value = s.default_tab || 'mirror';
+    // Vol step select
+    var vsSel = document.getElementById('sVolStep');
+    if (vsSel) vsSel.value = s.vol_step || '5';
+    // Update hw volume interception
+    hwVolumeEnabled = !!s.hw_volume;
+    hwVolStep = parseInt(s.vol_step) || 5;
+}
+
+// ============================================
+// HARDWARE VOLUME KEY INTERCEPTION
+// ============================================
+var hwVolumeEnabled = true;
+var hwVolStep = 5;
+var hwVolCurrent = 100; // track locally for quick feedback
+var hwVolSilentAudio = null;
+
+function initHwVolumeCapture() {
+    // Create a near-silent audio element to capture volume key events
+    try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var oscillator = ctx.createOscillator();
+        var gain = ctx.createGain();
+        gain.gain.value = 0.001; // nearly silent
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start();
+        hwVolSilentAudio = { ctx: ctx, osc: oscillator, gain: gain };
+    } catch(e) {}
+
+    // Listen for volume key events
+    document.addEventListener('keydown', function(e) {
+        if (!hwVolumeEnabled) return;
+        if (e.key === 'AudioVolumeUp' || e.key === 'VolumeUp') {
+            e.preventDefault();
+            hwVolAdjust(hwVolStep);
+        } else if (e.key === 'AudioVolumeDown' || e.key === 'VolumeDown') {
+            e.preventDefault();
+            hwVolAdjust(-hwVolStep);
+        } else if (e.key === 'AudioVolumeMute' || e.key === 'VolumeMute') {
+            e.preventDefault();
+            apiPost('/api/media/mute').then(function(){ showToast('Mute toggled'); }).catch(function(){});
+        }
+    });
+}
+
+function hwVolAdjust(delta) {
+    hwVolCurrent = Math.max(0, Math.min(100, hwVolCurrent + delta));
+    var slider = document.getElementById('volumeSlider');
+    var val = document.getElementById('volumeVal');
+    if (slider) slider.value = hwVolCurrent;
+    if (val) val.textContent = hwVolCurrent + '%';
+    apiPost('/api/volume', { volume: hwVolCurrent / 100.0 }).catch(function(){});
+    showToast('Volume: ' + hwVolCurrent + '%');
+}
+
+// Sync hw vol current from server
+function syncHwVol() {
+    apiGet('/api/volume').then(function(d) {
+        if (d.volume >= 0) hwVolCurrent = Math.round(d.volume * 100);
+    }).catch(function(){});
+}
+
+// ============================================
+// INIT
+// ============================================
+applyLocalSettings();
+initHwVolumeCapture();
+syncHwVol();
+
+// Apply default tab from settings on load
+var defaultTab = getLocalSetting('default_tab') || 'mirror';
+// Only switch if that tab is visible
+var s = getLocalSettings();
+var tabKey = 'tab_' + defaultTab;
+if (s[tabKey] !== false) {
+    setMode(defaultTab);
+} else {
+    setMode('mirror');
+}
+
 checkStatus();
 setInterval(checkStatus, 5000);
-startMirror();
-renderSubMode();
+loadSettings();
+
+// Bind persistent search input Enter key
+var searchInputEl = document.getElementById('searchInput');
+if (searchInputEl) searchInputEl.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); sendText(); } });
 
 var lastTE = 0;
 document.addEventListener('touchend', function(e) {
